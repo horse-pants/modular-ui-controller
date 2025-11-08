@@ -6,57 +6,52 @@
 #include <LovyanGFX.hpp>
 #include <lvgl.h>
 #include <lv_conf.h>
-
-
-//extern int audioLevel;
+#include "BootUI.h"
+#include "BrightnessSlider.h"
+#include "LEDManager.h"
+#include "WebUIManager.h"
 
 // FastLED
 #define ARC_WIDTH_THICK LV_MAX(LV_DPI_DEF / 5, 5)
-#define NUM_LEDS 145
-#define NUM_STRIPS 5
-#define NUM_PER_STRIP 29
-#define DATA_PIN 10
-#define MAX_BRIGHTNESS 255
 
-void setupFastLED();
-void handleLEDs();
-void fillWhite();
-void readFrequencies();
-void colorFill(CRGB c);
-void getVuLevels();
-extern int vuValue[7];
-extern int audioLevel;
+// Legacy compatibility - these macros now use the global LEDManager instance
+#define NUM_STRIPS (g_ledManager ? g_ledManager->getNumStrips() : 0)
+#define NUM_PER_STRIP (g_ledManager ? g_ledManager->getLedsPerStrip() : 0)
+#define NUM_LEDS (g_ledManager ? g_ledManager->getTotalLeds() : 0)
 
-enum animationOptions
-{
-  RAINBOW, 
-  CYLON, 
-  RGBCHASER,
-  BEATSINE,
-  ICEWAVES,
-  PURPLERAIN,
-  FIRE,
-  MATRIX,
-  VU
-};
-
-extern const char* animationDescription[];
-
+// Legacy compatibility - global state variables are maintained for backward compatibility
 extern uint8_t brightness;
 extern bool showAnimation;
 extern bool vu;
 extern bool white;
-extern animationOptions currentAnimation;
+extern LEDManager::AnimationType currentAnimation;
+extern int vuValue[7];
+extern int audioLevel;
+
+// Legacy animation enum - now typedef'd to the class enum
+typedef LEDManager::AnimationType animationOptions;
+
+// Legacy function names for backward compatibility - these will call LEDManager methods
+void setupFastLED();
+void handleLEDs();
+void fillWhite();
+void colorFill(CRGB c);
+void getVuLevels();
+int getVuForStrip(int strip);
+int getNumStrips();
+int getLedsPerStrip(); 
+int getTotalLeds();
+bool isLedConfigValid();
 
 
-// UI
-void setupScreen();
-void setupBootUI();  
-void addBootText(const char *text);  
-void setupUI();  
+// UI - modernized, setup handled directly through UIManager in main.cpp
 
-// WIfi
-void setupWifi();
+// Global BootUI instance - will be replaced with proper dependency injection later
+extern BootUI* g_bootUI;
+void cleanupBootUI();
+void cleanupBrightnessSlider();  
+
+// WiFi - modernized, handled through WiFiManager
 
 // Web UI
 void setupWebUi();

@@ -60,6 +60,7 @@
         "complex": "cpp",
         "set": "cpp",
         "future": "cpp",
-        "variant": "cpp"
+        "variant": "cpp",
+        "arduino.h": "c"
     }
 }
