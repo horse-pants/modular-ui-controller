@@ -62,7 +62,13 @@ public:
      * @brief Perform startup fade-in sequence
      */
     void performStartupFadeIn();
-    
+
+    /**
+     * @brief Show OTA update progress on LEDs
+     * @param progress Progress percentage (0-100)
+     */
+    void showOTAProgress(uint8_t progress);
+
     /**
      * @brief Get current brightness
      * @return Current brightness value
@@ -201,7 +207,10 @@ private:
     // VU data
     int vuLevels_[7];
     int audioLevel_;
-    
+
+    // OTA progress tracking
+    uint8_t lastOTAProgress_;
+
     Preferences preferences_;
     
     // Animation timing

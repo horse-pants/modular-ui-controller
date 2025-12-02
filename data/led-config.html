@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>LED Configuration</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="style.css">
+    <script src="theme.js"></script>
+</head>
+<body>
+    <header>
+        <div class="header-controls">
+            <h1>LED Configuration</h1>
+            <button type="button" class="theme-toggle" onclick="toggleTheme()">
+                <i class="fas fa-sun"></i>
+            </button>
+        </div>
+    </header>
+
+    <main>
+        <div class="container">
+            <p>Configure your LED strip settings. Changes require a restart.</p>
+
+            <form action="/save-led-config" method="POST">
+                <label for="num_strips">Number of LED Strips:</label>
+                <input type="number" id="num_strips" name="num_strips" min="1" max="20" placeholder="e.g., 5" required>
+
+                <label for="leds_per_strip">LEDs per Strip:</label>
+                <input type="number" id="leds_per_strip" name="leds_per_strip" min="1" max="300" placeholder="e.g., 29" required>
+
+                <p style="color: var(--text-secondary); font-size: 14px; margin-top: 10px;">
+                    <strong>Total LEDs:</strong> <span id="totalLeds">0</span>
+                </p>
+
+                <button type="submit">Save LED Configuration & Restart</button>
+            </form>
+
+            <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid var(--border-primary);">
+                <a href="/" style="color: var(--accent-primary); text-decoration: none;">← Back to Main Controls</a>
+                <br><br>
+                <a href="/setup" style="color: var(--accent-primary); text-decoration: none;">WiFi Settings</a>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        function updateTotalLeds() {
+            const numStrips = parseInt(document.getElementById('num_strips').value) || 0;
+            const ledsPerStrip = parseInt(document.getElementById('leds_per_strip').value) || 0;
+            const total = numStrips * ledsPerStrip;
+            document.getElementById('totalLeds').textContent = total;
+        }
+
+        function loadCurrentConfig() {
+            fetch('/get-led-config')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.hasLedSettings) {
+                        document.getElementById('num_strips').value = data.numStrips || '';
+                        document.getElementById('leds_per_strip').value = data.ledsPerStrip || '';
+                        updateTotalLeds();
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading LED config:', error);
+                });
+        }
+
+        // Load current config when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            loadCurrentConfig();
+        });
+
+        // Update total LEDs when inputs change
+        document.getElementById('num_strips').addEventListener('input', updateTotalLeds);
+        document.getElementById('leds_per_strip').addEventListener('input', updateTotalLeds);
+    </script>
+</body>
+</html>

@@ -8,7 +8,7 @@
     box-sizing: border-box;
 }
 
-/* Dark theme (default) */
+/* Dark theme (default) - Cyan/Teal accent to match LVGL UI */
 :root {
     --bg-primary: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 50%, #0f0f0f 100%);
     --bg-secondary: linear-gradient(145deg, #1e1e1e, #2a2a2a);
@@ -17,13 +17,13 @@
     --text-primary: #e0e0e0;
     --text-secondary: #b0b0b0;
     --text-muted: #666;
-    --accent-primary: #00D9FF;
-    --accent-secondary: #00B8E6;
+    --accent-primary: #00D9FF;        /* Cyan - matches UI_COLOR_PRIMARY */
+    --accent-secondary: #00B8E6;      /* Darker cyan */
     --border-primary: #444;
     --border-secondary: #333;
     --shadow-primary: rgba(0, 0, 0, 0.4);
     --shadow-secondary: rgba(0, 0, 0, 0.6);
-    --shadow-accent: rgba(0, 217, 255, 0.3);
+    --shadow-accent: rgba(0, 217, 255, 0.3);  /* Cyan shadow */
     --input-bg: #1a1a1a;
     --button-bg: linear-gradient(145deg, #2a2a2a, #1a1a1a);
     --form-bg: #0a0a0a;
@@ -57,7 +57,18 @@ body {
     margin: 0;
     padding: 0;
     min-height: 100vh;
+    overflow-y: auto;
     transition: all 0.3s ease;
+}
+
+/* Prevent tiny scrollbars */
+html {
+    overflow-y: auto;
+}
+
+body::-webkit-scrollbar {
+    width: 0px;
+    background: transparent;
 }
 
 @media (max-width: 768px) {
@@ -463,6 +474,30 @@ a:hover {
     display: flex;
     gap: 0.75rem;
     flex-wrap: wrap;
+}
+
+.button {
+    background: var(--button-bg);
+    color: var(--text-primary);
+    border: 2px solid var(--border-primary);
+    padding: 0.75rem 1.5rem;
+    border-radius: 12px;
+    cursor: pointer;
+    font-size: 1rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    text-decoration: none;
+    display: inline-block;
+}
+
+.button:hover {
+    background: var(--button-bg);  /* Keep same background */
+    border-color: var(--accent-primary);
+    color: var(--accent-primary);
+    box-shadow: 0 0 20px var(--shadow-accent);
+    transform: translateY(-2px);  /* Subtle lift effect */
 }
 
 .button-group .button {

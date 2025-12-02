@@ -1,8 +1,13 @@
 #include "WebUIManager.h"
 #include "UIManager.h"
-#include "WiFiManager.h"
+// OLD: #include "WiFiManager.h"
+// NEW: Using library version
+#include <WiFiSetupManager.h>
+#include <OTAManager.h>
+#include <Logger.h>
 #include "LEDManager.h"
 #include "ColourWheel.h"
+#include <FastLED.h>  // For CRGB color constants
 
 // Legacy global variables for backward compatibility
 extern uint8_t brightness;
@@ -13,7 +18,9 @@ extern LEDManager::AnimationType currentAnimation;
 
 // Global manager instances
 extern UIManager* g_uiManager;
-extern WiFiManager* g_wifiManager;
+// OLD: extern WiFiManager* g_wifiManager;
+// NEW: Using library version WiFiSetupManager
+extern WiFiSetupManager* g_wifiManager;
 extern LEDManager* g_ledManager;
 extern BrightnessSlider* g_brightnessSlider;
 extern ColourWheel* g_colourWheel;
@@ -21,39 +28,97 @@ extern ColourWheel* g_colourWheel;
 // Global WebUI manager instance
 WebUIManager* g_webUIManager = nullptr;
 
-WebUIManager::WebUIManager()
+// Global OTA manager instance
+OTAManager* g_otaManager = nullptr;
+
+WebUIManager::WebUIManager(AsyncWebServer* webServer)
     : initialized_(false)
-    , server_(80)
+    , server_(webServer)
     , webSocket_("/ws")
 {
 }
 
 WebUIManager::~WebUIManager() {
-    // AsyncWebServer and AsyncWebSocket cleanup is handled automatically
+    // AsyncWebSocket cleanup is handled automatically
+    // Note: server_ is NOT owned by us, so we don't delete it
 }
 
 bool WebUIManager::initialize() {
     if (initialized_) {
         return true;
     }
-    
-    if (!initializeSPIFFS()) {
-        Serial.println("Failed to initialize SPIFFS");
+
+    if (!server_) {
+        Logger.error("WebUIManager: No web server provided!");
         return false;
     }
-    
+
+    if (!initializeLittleFS()) {
+        Logger.error("Failed to initialize LittleFS");
+        return false;
+    }
+
     initializeWebSocket();
     setupRoutes();
     setupAPIEndpoints();
     setupStaticFiles();
-    
-    // Initialize ElegantOTA
-    ElegantOTA.begin(&server_);
-    
-    // Start the server
-    server_.begin();
-    Serial.println("Web UI Manager initialized successfully");
-    
+
+    // Initialize OTA Manager with callbacks
+    if (!g_otaManager) {
+        g_otaManager = new OTAManager();
+    }
+
+    if (g_otaManager) {
+        // Set start callback
+        g_otaManager->setStartCallback([]() {
+            // Turn off animations during OTA
+            if (g_ledManager) {
+                g_ledManager->setAnimationEnabled(false);
+            }
+        });
+
+        // Set LED progress callback
+        g_otaManager->setLEDProgressCallback([](uint8_t progress) {
+            if (g_ledManager) {
+                g_ledManager->showOTAProgress(progress);
+            }
+        });
+
+        // Set screen progress callback
+        g_otaManager->setScreenProgressCallback([](uint8_t progress, OTAManager::Stage stage) {
+            if (g_uiManager) {
+                if (stage == OTAManager::Stage::STARTING) {
+                    g_uiManager->showOTAScreen();
+                } else if (stage == OTAManager::Stage::IN_PROGRESS || stage == OTAManager::Stage::COMPLETE) {
+                    g_uiManager->updateOTAProgress(progress);
+                } else if (stage == OTAManager::Stage::FAILED) {
+                    g_uiManager->hideOTAScreen();
+                }
+            }
+        });
+
+        // Set end callback for failure handling
+        g_otaManager->setEndCallback([](bool success) {
+            if (!success) {
+                // Flash red on failure
+                if (g_ledManager) {
+                    for (int i = 0; i < 3; i++) {
+                        g_ledManager->fillColor(CRGB::Red);
+                        delay(200);
+                        g_ledManager->fillColor(CRGB::Black);
+                        delay(200);
+                    }
+                }
+            }
+        });
+
+        // Initialize OTA with the shared server
+        g_otaManager->begin(server_);
+    }
+
+    // NOTE: server_->begin() is called by WiFiSetupManager, not here
+    Logger.info("Web UI Manager initialized successfully");
+
     initialized_ = true;
     return true;
 }
@@ -76,95 +141,223 @@ void WebUIManager::notifyClients() {
     webSocket_.textAll(stateResponse);
 }
 
-bool WebUIManager::initializeSPIFFS() {
-    if (!SPIFFS.begin(true)) {
-        Serial.println("An error has occurred while mounting SPIFFS");
+bool WebUIManager::initializeLittleFS() {
+    Logger.info("=== Initializing LittleFS ===");
+
+    // Try to mount without auto-format first to see actual errors
+    if (!LittleFS.begin(false)) {
+        Logger.warning("LittleFS Mount Failed - uploaded image cannot be mounted!");
+        Logger.warning("This means the uploaded filesystem has wrong block/page parameters.");
+        Logger.info("Trying to mount with format-on-fail as fallback...");
+
+        // As fallback, allow formatting
+        if (!LittleFS.begin(true)) {
+            Logger.error("LittleFS Mount Failed even with format!");
+            return false;
+        }
+        Logger.warning("WARNING: LittleFS was formatted blank. Files were NOT loaded from uploaded image.");
+    } else {
+        Logger.info("LittleFS mounted successfully from uploaded image!");
+    }
+
+    // List files to verify filesystem contents
+    File root = LittleFS.open("/");
+    if (!root) {
+        Logger.error("ERROR: Failed to open root directory");
         return false;
     }
-    Serial.println("SPIFFS mounted successfully");
+
+    // Check if files exist, write from PROGMEM if missing
+    writeEmbeddedFilesToFS();
+
+    Logger.debug("Files in LittleFS:");
+    File file = root.openNextFile();
+    int fileCount = 0;
+    while (file) {
+        Logger.debug("  - %s (%d bytes)", file.name(), file.size());
+        file = root.openNextFile();
+        fileCount++;
+    }
+    Logger.debug("Total files found: %d", fileCount);
+    Logger.info("=== LittleFS initialization complete ===");
+
     return true;
+}
+
+void WebUIManager::writeEmbeddedFilesToFS() {
+    #include "WebFilesData.h"
+
+    struct WebFile {
+        const char* filename;
+        const char* content;
+    };
+
+    WebFile files[] = {
+        {"/index.html", INDEX_HTML},
+        {"/led-config.html", LED_CONFIG_HTML},
+        {"/style.css", STYLE_CSS},
+        {"/script.js", SCRIPT_JS},
+        {"/theme.js", THEME_JS}
+    };
+
+    Logger.debug("Checking web files...");
+    int written = 0;
+    int updated = 0;
+
+    for (const auto& webFile : files) {
+        bool needsWrite = false;
+
+        if (!LittleFS.exists(webFile.filename)) {
+            // File doesn't exist, write it
+            needsWrite = true;
+        } else {
+            // File exists, check if content matches
+            File existingFile = LittleFS.open(webFile.filename, "r");
+            if (existingFile) {
+                String existingContent = existingFile.readString();
+                existingFile.close();
+
+                String newContent = FPSTR(webFile.content);
+
+                if (existingContent != newContent) {
+                    Logger.debug("  %s has changed, updating...", webFile.filename);
+                    needsWrite = true;
+                    updated++;
+                }
+            } else {
+                needsWrite = true;
+            }
+        }
+
+        if (needsWrite) {
+            File file = LittleFS.open(webFile.filename, "w");
+            if (file) {
+                file.print(FPSTR(webFile.content));
+                file.close();
+                Logger.debug("  Writing %s from PROGMEM... OK", webFile.filename);
+                written++;
+            } else {
+                Logger.error("  Writing %s from PROGMEM... FAILED!", webFile.filename);
+            }
+        }
+    }
+
+    if (written > 0) {
+        Logger.info("Wrote %d files from PROGMEM (%d updated, %d new)", written, updated, written - updated);
+    } else {
+        Logger.debug("All web files are up to date");
+    }
 }
 
 void WebUIManager::initializeWebSocket() {
     webSocket_.onEvent(staticWebSocketEventHandler);
-    server_.addHandler(&webSocket_);
+    server_->addHandler(&webSocket_);
 }
 
 void WebUIManager::setupRoutes() {
+    Logger.debug("=== WebUIManager: Setting up routes ===");
+
     // Route for root / web page
-    server_.on("/", HTTP_GET, [](AsyncWebServerRequest* request) {
-        request->send(SPIFFS, "/index.html", "text/html", false);
+    server_->on("/", HTTP_GET, [](AsyncWebServerRequest* request) {
+        Logger.debug("Route called: GET /");
+        if (LittleFS.exists("/index.html")) {
+            File file = LittleFS.open("/index.html", "r");
+            Logger.debug("  /index.html exists, size: %d bytes", file.size());
+            file.close();
+        } else {
+            Logger.error("  /index.html NOT FOUND!");
+        }
+        request->send(LittleFS, "/index.html", "text/html", false);
     });
-    
+
     // Debug route to test connectivity
-    server_.on("/test", HTTP_GET, [](AsyncWebServerRequest* request) {
-        request->send(200, "text/plain", "Server is working! IP: " + WiFi.softAPIP().toString());
+    server_->on("/test", HTTP_GET, [](AsyncWebServerRequest* request) {
+        Logger.debug("Route called: GET /test");
+        request->send(200, "text/plain", "Server is working! IP: " + WiFi.localIP().toString());
     });
-    
-    // Captive portal detection routes
-    server_.on("/generate_204", HTTP_GET, [](AsyncWebServerRequest* request) {
-        request->redirect("/setup");
-    });
-    server_.on("/fwlink", HTTP_GET, [](AsyncWebServerRequest* request) {
-        request->redirect("/setup");
-    });
-    server_.on("/connecttest.txt", HTTP_GET, [](AsyncWebServerRequest* request) {
-        request->redirect("/setup");
-    });
-    server_.on("/hotspot-detect.html", HTTP_GET, [](AsyncWebServerRequest* request) {
-        request->redirect("/setup");
-    });
-    server_.on("/redirect", HTTP_GET, [](AsyncWebServerRequest* request) {
-        request->redirect("/setup");
-    });
-    
-    // WiFi Setup route - serve the HTML file
-    server_.on("/setup", HTTP_GET, [](AsyncWebServerRequest* request) {
-        request->send(SPIFFS, "/setup.html", "text/html");
-    });
-    
-    // Factory reset GET endpoint to serve the HTML page
-    server_.on("/factory-reset", HTTP_GET, [](AsyncWebServerRequest* request) {
-        request->send(SPIFFS, "/factory-reset.html", "text/html");
-    });
+
+    Logger.debug("=== WebUIManager: Routes setup complete ===");
+    // NOTE: WiFi setup routes (/setup, /factory-reset) are handled by
+    // WiFiSetupManager library (serves embedded HTML with neutral theme)
 }
 
 void WebUIManager::setupAPIEndpoints() {
-    // Get networks endpoint for the HTML page
-    server_.on("/get-networks", HTTP_GET, [this](AsyncWebServerRequest* request) {
-        handleGetNetworks(request);
+    // NOTE: WiFi setup endpoints (/get-networks, /save-wifi, /factory-reset POST)
+    // are handled by WiFiSetupManager library
+
+    // LED Configuration endpoints
+    server_->on("/led-config", HTTP_GET, [](AsyncWebServerRequest* request) {
+        request->send(LittleFS, "/led-config.html", "text/html");
     });
-    
-    // Scan networks endpoint - just return existing scan from startup
-    server_.on("/scan-networks", HTTP_POST, [this](AsyncWebServerRequest* request) {
-        handleScanNetworks(request);
+
+    server_->on("/get-led-config", HTTP_GET, [](AsyncWebServerRequest* request) {
+        Preferences ledPrefs;
+        ledPrefs.begin("led-config", true); // Read-only
+
+        bool hasLedSettings = ledPrefs.isKey("num_strips");
+        int numStrips = ledPrefs.getInt("num_strips", 0);
+        int ledsPerStrip = ledPrefs.getInt("leds_per_strip", 0);
+        int totalLeds = numStrips * ledsPerStrip;
+
+        ledPrefs.end();
+
+        String json = "{";
+        json += "\"hasLedSettings\":" + String(hasLedSettings ? "true" : "false") + ",";
+        json += "\"numStrips\":" + String(numStrips) + ",";
+        json += "\"ledsPerStrip\":" + String(ledsPerStrip) + ",";
+        json += "\"totalLeds\":" + String(totalLeds);
+        json += "}";
+
+        request->send(200, "application/json", json);
     });
-    
-    // Handle WiFi configuration save
-    server_.on("/save-wifi", HTTP_POST, [this](AsyncWebServerRequest* request) {
-        handleWiFiSave(request);
+
+    server_->on("/save-led-config", HTTP_POST, [](AsyncWebServerRequest* request) {
+        int numStrips = 0;
+        int ledsPerStrip = 0;
+
+        if (request->hasParam("num_strips", true)) {
+            numStrips = request->getParam("num_strips", true)->value().toInt();
+        }
+        if (request->hasParam("leds_per_strip", true)) {
+            ledsPerStrip = request->getParam("leds_per_strip", true)->value().toInt();
+        }
+
+        if (numStrips > 0 && ledsPerStrip > 0) {
+            Preferences ledPrefs;
+            ledPrefs.begin("led-config", false);
+            ledPrefs.putInt("num_strips", numStrips);
+            ledPrefs.putInt("leds_per_strip", ledsPerStrip);
+            ledPrefs.end();
+
+            Logger.info("Saved LED config: %d strips, %d LEDs per strip", numStrips, ledsPerStrip);
+
+            String html = "<h1>LED Configuration Saved!</h1>";
+            html += "<p>Strips: " + String(numStrips) + "</p>";
+            html += "<p>LEDs per strip: " + String(ledsPerStrip) + "</p>";
+            html += "<p>Total LEDs: " + String(numStrips * ledsPerStrip) + "</p>";
+            html += "<p>Restarting...</p>";
+            html += "<script>setTimeout(function(){ window.location.href='/'; }, 3000);</script>";
+
+            request->send(200, "text/html", html);
+
+            // Schedule restart
+            extern bool g_restartRequested;
+            g_restartRequested = true;
+        } else {
+            request->send(400, "text/plain", "Invalid LED configuration");
+        }
     });
-    
-    // Get current WiFi settings endpoint
-    server_.on("/get-current-settings", HTTP_GET, [this](AsyncWebServerRequest* request) {
-        handleGetCurrentSettings(request);
-    });
-    
-    // Factory reset POST endpoint to perform the reset
-    server_.on("/factory-reset", HTTP_POST, [this](AsyncWebServerRequest* request) {
-        handleFactoryReset(request);
-    });
-    
+
     // Legacy get-message endpoint (mostly unused)
-    server_.on("/get-message", HTTP_GET, [](AsyncWebServerRequest* request) {
+    server_->on("/get-message", HTTP_GET, [](AsyncWebServerRequest* request) {
         String response = "";
         request->send(200, "application/json", response);
     });
 }
 
 void WebUIManager::setupStaticFiles() {
-    // Serve static files from SPIFFS
-    server_.serveStatic("/", SPIFFS, "/");
+    // Serve static files from LittleFS
+    server_->serveStatic("/", LittleFS, "/");
 }
 
 String WebUIManager::generateAnimationsResponse() {
@@ -245,10 +438,10 @@ void WebUIManager::onWebSocketEvent(AsyncWebSocket* server, AsyncWebSocketClient
                                    AwsEventType type, void* arg, uint8_t* data, size_t len) {
     switch (type) {
         case WS_EVT_CONNECT:
-            Serial.printf("WebSocket client #%u connected from %s\n", client->id(), client->remoteIP().toString().c_str());
+            Logger.debug("WebSocket client #%u connected from %s", client->id(), client->remoteIP().toString().c_str());
             break;
         case WS_EVT_DISCONNECT:
-            Serial.printf("WebSocket client #%u disconnected\n", client->id());
+            Logger.debug("WebSocket client #%u disconnected", client->id());
             break;
         case WS_EVT_DATA:
             handleWebSocketMessage(arg, data, len);
@@ -306,7 +499,7 @@ void WebUIManager::handleAnimationMessage(const JsonDocument& request) {
 void WebUIManager::handleColorMessage(const JsonDocument& request) {
     if (g_colourWheel) {
         String hexValue = (const char*)request["value"];
-        Serial.println(hexValue);
+        Logger.debug("Hex value: %s", hexValue.c_str());
         g_colourWheel->setColor(hexValue);
     }
 }
@@ -372,13 +565,13 @@ void WebUIManager::handleWiFiSave(AsyncWebServerRequest* request) {
         if (wifiPassword.length() > 0) {
             prefs.putString("password", wifiPassword);
         }
-        
+
         prefs.end();
-        Serial.printf("Updated WiFi settings: Host=%s, SSID=%s\n", networkName.c_str(), wifiNetwork.c_str());
+        Logger.info("Updated WiFi settings: Host=%s, SSID=%s", networkName.c_str(), wifiNetwork.c_str());
     } else {
-        Serial.println("WiFi settings unchanged - skipping WiFi update");
+        Logger.debug("WiFi settings unchanged - skipping WiFi update");
     }
-    
+
     // Save LED configuration preferences
     if (numStrips > 0 && ledsPerStrip > 0) {
         Preferences ledPrefs;
@@ -386,14 +579,14 @@ void WebUIManager::handleWiFiSave(AsyncWebServerRequest* request) {
         ledPrefs.putInt("num_strips", numStrips);
         ledPrefs.putInt("leds_per_strip", ledsPerStrip);
         ledPrefs.end();
-        Serial.printf("Saved LED config: %d strips, %d LEDs per strip\n", numStrips, ledsPerStrip);
+        Logger.info("Saved LED config: %d strips, %d LEDs per strip", numStrips, ledsPerStrip);
     }
     
     // Read the HTML template and replace placeholders
     String html = "";
     try {
-        if (SPIFFS.exists("/wifi-saved.html")) {
-            File file = SPIFFS.open("/wifi-saved.html", "r");
+        if (LittleFS.exists("/wifi-saved.html")) {
+            File file = LittleFS.open("/wifi-saved.html", "r");
             if (file) {
                 html = file.readString();
                 file.close();
@@ -476,8 +669,8 @@ void WebUIManager::handleFactoryReset(AsyncWebServerRequest* request) {
     
     // Read the HTML template
     String html = "";
-    if (SPIFFS.exists("/factory-reset.html")) {
-        File file = SPIFFS.open("/factory-reset.html", "r");
+    if (LittleFS.exists("/factory-reset.html")) {
+        File file = LittleFS.open("/factory-reset.html", "r");
         if (file) {
             html = file.readString();
             file.close();
@@ -506,9 +699,9 @@ void WebUIManager::staticWebSocketEventHandler(AsyncWebSocket* server, AsyncWebS
 
 // Legacy function compatibility
 void setupWebUi() {
-    if (!g_webUIManager) {
-        g_webUIManager = new WebUIManager();
-    }
+    // NOTE: This legacy function is deprecated
+    // WebUIManager should now be constructed with WiFiSetupManager's web server
+    // See main.cpp for proper initialization
     if (g_webUIManager) {
         g_webUIManager->initialize();
     }

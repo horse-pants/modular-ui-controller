@@ -1,9 +1,14 @@
 #include "modular-ui.h"
 #include "UIManager.h"
-#include "WiFiManager.h"
+// OLD: #include "WiFiManager.h"
+// OLD: BootUI* g_bootUI = nullptr;
+// NEW: Using library version
+#include <WiFiSetupManager.h>
+#include <WiFiSetupBootUI.h>
+#include <OTAManager.h>
+#include <Logger.h>
 #include "LEDManager.h"
 #include "WebUIManager.h"
-#include <ElegantOTA.h>
 #include <memory>
 
 // Global UI manager and component instances
@@ -15,8 +20,10 @@ extern WhiteButton* g_whiteButton;
 extern VuButton* g_vuButton;
 extern VuGraph* g_vuGraph;
 
-// Global WiFi manager instance
-extern WiFiManager* g_wifiManager;
+// OLD: Global WiFi manager instance (old built-in version)
+// extern WiFiManager* g_wifiManager;
+// NEW: Global WiFi setup manager instance (library version)
+WiFiSetupManager* g_wifiManager = nullptr;
 
 // Global LED manager instance
 extern LEDManager* g_ledManager;
@@ -24,8 +31,10 @@ extern LEDManager* g_ledManager;
 // Global WebUI manager instance
 extern WebUIManager* g_webUIManager;
 
-// Global BootUI instance
-BootUI* g_bootUI = nullptr;
+// OLD: Global BootUI instance (old built-in version)
+// BootUI* g_bootUI = nullptr;
+// NEW: Global WiFiSetupBootUI instance (library version)
+WiFiSetupBootUI* g_bootUI = nullptr;
 
 // Global restart flag for async operations
 bool g_restartRequested = false;
@@ -35,31 +44,83 @@ void setup(void)
 {
   Serial.begin(115200);
   delay(1000);
-  Serial.println("started...");
+
+  // Initialize logger early (before WiFi so we can log WiFi setup)
+  Logger.begin(200, true, true);  // 200 log entries, Serial enabled, WebSocket enabled
+  Logger.info("ModularUI Controller Starting...");
 
   // Initialize UI Manager
   if (!g_uiManager) {
     g_uiManager = new UIManager();
   }
-  
+
   if (g_uiManager) {
     // Always initialize the basic screen for LVGL
     g_uiManager->initializeScreen();
-    
-    // Initialize BootUI
-    g_bootUI = new BootUI();
-    if (g_bootUI && g_bootUI->initialize()) {
-      g_bootUI->addText("ModularUI Controller Starting...\r\n");
-    }
-    
-    // Initialize WiFi Manager
+
+    // OLD: Initialize BootUI (built-in version)
+    // g_bootUI = new BootUI();
+    // if (g_bootUI && g_bootUI->initialize()) {
+    //   g_bootUI->addText("ModularUI Controller Starting...\r\n");
+    // }
+
+    // NEW: Initialize WiFiSetupBootUI (library version)
+    g_bootUI = new WiFiSetupBootUI();
+
+    // NEW: Create theme matching your UI colors (cyan theme)
+    static WiFiSetupTheme cyanTheme;
+    cyanTheme.primaryColor = UI_COLOR_PRIMARY;           // 0x00D9FF cyan
+    cyanTheme.backgroundColor = UI_COLOR_BACKGROUND;     // 0x0a0a0a
+    cyanTheme.surfaceColor = UI_COLOR_SURFACE;           // 0x1a1a1a
+    cyanTheme.surfaceLight = UI_COLOR_SURFACE_LIGHT;     // 0x2a2a2a
+    cyanTheme.textColor = UI_COLOR_TEXT;                 // 0xe0e0e0
+    cyanTheme.borderColor = UI_COLOR_BORDER;             // 0x444444
+    // Web UI colors (for future web integration)
+    cyanTheme.webPrimaryColor = "#00D9FF";
+    cyanTheme.webPrimaryDark = "#00B8E6";
+    cyanTheme.webBackgroundColor = "#0a0a0a";
+    cyanTheme.webSurfaceColor = "#1a1a1a";
+    cyanTheme.webTextColor = "#e0e0e0";
+    cyanTheme.webTextSecondary = "#b0b0b0";
+    cyanTheme.webBorderColor = "#444444";
+
+    // NEW: Create WiFi Setup Manager config (library version with callback)
     if (!g_wifiManager) {
-      g_wifiManager = new WiFiManager();
+      WiFiSetupConfig config;
+      config.defaultAPName = "ModularUI-Setup";
+      config.defaultAPPassword = "modularui123";
+      config.statusCallback = g_bootUI; // Use boot UI as callback
+      config.theme = &cyanTheme;        // Use your cyan theme!
+      g_wifiManager = new WiFiSetupManager(config);
+
+      // Register Logger endpoints BEFORE starting WiFi (before web server begins)
+      Logger.registerEndpoints(g_wifiManager->getWebServer());
+      Logger.info("Logger web endpoints registered");
     }
+
+    // Initialize boot UI with cyan theme
+    if (g_bootUI && g_wifiManager) {
+      // Pass theme to match your UI - screen size auto-detected (320x480)
+      // For other displays, specify dimensions: bootUI->initialize("TITLE", &theme, 536, 240)
+      if (g_bootUI->initialize("MODULAR UI CONTROLLER", &cyanTheme)) {
+        g_bootUI->addText("ModularUI Controller Starting...\r\n");
+      }
+    }
+
+    // OLD: Initialize WiFi Manager (built-in version)
+    // if (!g_wifiManager) {
+    //   g_wifiManager = new WiFiManager();
+    // }
+    // if (g_wifiManager) {
+    //   g_wifiManager->initialize();
+    // }
+
+    // Start WiFi setup
     if (g_wifiManager) {
-      g_wifiManager->initialize();
+      g_wifiManager->begin();
+      Logger.info("Logger web interface available at /logs");
     }
-    
+
     // Only initialize full UI components and LED manager if not in setup mode
     if (g_wifiManager && !g_wifiManager->isInSetupMode()) {
       // Initialize full UI components
@@ -84,12 +145,15 @@ void setup(void)
     // If in setup mode, the WiFi manager will show the AP setup screen
   }
   
-  // Initialize WebUI Manager
-  if (!g_webUIManager) {
-    g_webUIManager = new WebUIManager();
+  // Initialize WebUI Manager with shared web server from WiFiSetupManager
+  if (!g_webUIManager && g_wifiManager) {
+    g_webUIManager = new WebUIManager(g_wifiManager->getWebServer());
   }
   if (g_webUIManager) {
     g_webUIManager->initialize();
+
+    // Attach WebSocket to Logger for real-time log broadcasting
+    Logger.attachWebSocket(g_webUIManager->getWebSocket());
   }
   
   // Perform startup fade-in after all initialization is complete (only if not in setup mode)
@@ -133,7 +197,12 @@ void loop()
   if (g_webUIManager) {
     g_webUIManager->update();
   }
-  
+
+  // Update OTA manager
+  if (g_otaManager) {
+    g_otaManager->loop();
+  }
+
   // Handle restart requests from async operations
   if (g_restartRequested && g_restartTime == 0) {
     g_restartTime = millis();
@@ -141,13 +210,21 @@ void loop()
   if (g_restartTime > 0 && millis() - g_restartTime > 2000) {
     ESP.restart();
   }
-  
-  ElegantOTA.loop();
 }
 
 // Cleanup functions - called when needed
+// OLD: Cleanup for built-in BootUI
+// void cleanupBootUI() {
+//   if (g_bootUI) {
+//     delete g_bootUI;
+//     g_bootUI = nullptr;
+//   }
+// }
+
+// NEW: Cleanup for library WiFiSetupBootUI
 void cleanupBootUI() {
   if (g_bootUI) {
+    g_bootUI->cleanup(); // Call cleanup method
     delete g_bootUI;
     g_bootUI = nullptr;
   }

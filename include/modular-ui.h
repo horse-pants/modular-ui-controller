@@ -2,11 +2,27 @@
 #define LGFX_AUTODETECT // Autodetect board
 #define LGFX_USE_V1     // set to use new version of library
 
+// Common UI Colors
+#define UI_COLOR_PRIMARY        0x00D9FF    // Primary cyan
+#define UI_COLOR_PRIMARY_DARK   0x00B8E6    // Darker cyan for gradients/hover
+#define UI_COLOR_PRIMARY_DARKER 0x008BB3    // Even darker cyan for bottom gradients
+#define UI_COLOR_PRIMARY_DIM    0x006080    // Dimmed cyan for subtle effects
+#define UI_COLOR_BACKGROUND     0x0a0a0a    // Dark background
+#define UI_COLOR_SURFACE        0x1a1a1a    // Surface/card background
+#define UI_COLOR_SURFACE_LIGHT  0x2a2a2a    // Lighter surface
+#define UI_COLOR_BORDER         0x444444    // Default border
+#define UI_COLOR_TEXT           0xe0e0e0    // Primary text
+#define UI_COLOR_TEXT_MUTED     0xb0b0b0    // Muted text
+#define UI_COLOR_BLACK          0x000000    // Pure black
+#define UI_COLOR_WHITE          0xffffff    // Pure white
+
 #include <FastLED.h>
 #include <LovyanGFX.hpp>
 #include <lvgl.h>
 #include <lv_conf.h>
-#include "BootUI.h"
+// OLD: #include "BootUI.h"
+// NEW: Using library version
+#include <WiFiSetupBootUI.h>
 #include "BrightnessSlider.h"
 #include "LEDManager.h"
 #include "WebUIManager.h"
@@ -46,8 +62,10 @@ bool isLedConfigValid();
 
 // UI - modernized, setup handled directly through UIManager in main.cpp
 
-// Global BootUI instance - will be replaced with proper dependency injection later
-extern BootUI* g_bootUI;
+// OLD: Global BootUI instance (built-in version)
+// extern BootUI* g_bootUI;
+// NEW: Global WiFiSetupBootUI instance (library version)
+extern WiFiSetupBootUI* g_bootUI;
 void cleanupBootUI();
 void cleanupBrightnessSlider();  
 

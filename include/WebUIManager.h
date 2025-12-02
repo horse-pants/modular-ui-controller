@@ -3,8 +3,13 @@
 #include <Arduino.h>
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
-#include <ElegantOTA.h>
-#include <SPIFFS.h>
+
+// Configure LittleFS block/page size to match mklittlefs build parameters
+// Build uses: -p 256 -b 4096
+#define CONFIG_LITTLEFS_BLOCK_SIZE 4096
+#define CONFIG_LITTLEFS_PAGE_SIZE 256
+#include <LittleFS.h>
+
 #include <WiFi.h>
 #include <Preferences.h>
 #include <ArduinoJson.h>
@@ -19,18 +24,19 @@ class WebUIManager {
 public:
     /**
      * @brief Constructor
+     * @param webServer Pointer to shared web server instance (from WiFiSetupManager)
      */
-    WebUIManager();
-    
+    WebUIManager(AsyncWebServer* webServer);
+
     /**
      * @brief Destructor - automatically cleans up resources
      */
     ~WebUIManager();
-    
+
     // Disable copy operations to prevent resource issues
     WebUIManager(const WebUIManager&) = delete;
     WebUIManager& operator=(const WebUIManager&) = delete;
-    
+
     /**
      * @brief Initialize web server and all endpoints
      * @return true if successful, false otherwise
@@ -53,14 +59,21 @@ public:
      */
     bool isInitialized() const { return initialized_; }
 
+    /**
+     * @brief Get WebSocket instance for external use (e.g., Logger)
+     * @return Pointer to AsyncWebSocket instance
+     */
+    AsyncWebSocket* getWebSocket() { return &webSocket_; }
+
 private:
     // Member variables
     bool initialized_;
-    AsyncWebServer server_;
+    AsyncWebServer* server_;  // Pointer to shared server (from WiFiSetupManager)
     AsyncWebSocket webSocket_;
     
     // Private methods
-    bool initializeSPIFFS();
+    bool initializeLittleFS();
+    void writeEmbeddedFilesToFS();
     void initializeWebSocket();
     void setupRoutes();
     void setupAPIEndpoints();
@@ -96,8 +109,14 @@ private:
                                           AwsEventType type, void* arg, uint8_t* data, size_t len);
 };
 
+// Forward declaration
+class OTAManager;
+
 // Global WebUI manager instance
 extern WebUIManager* g_webUIManager;
+
+// Global OTA manager instance
+extern OTAManager* g_otaManager;
 
 // Legacy function compatibility - these will call WebUIManager methods
 void setupWebUi();

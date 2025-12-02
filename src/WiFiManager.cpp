@@ -1,15 +1,27 @@
+// ============================================================================
+// OLD WiFiManager.cpp - NO LONGER USED
+// This file has been replaced by library/src/WiFiSetupManager.cpp
+// Commenting out to prevent linker conflicts
+// ============================================================================
+
+/*
 #include "WiFiManager.h"
 #include "modular-ui.h"
 #include "ui.h"
 
 // Static constants
 const char* WiFiManager::DEFAULT_AP_NAME = "ModularUI-Setup";
-const char* WiFiManager::DEFAULT_AP_PASSWORD = "modularui123";  
+const char* WiFiManager::DEFAULT_AP_PASSWORD = "modularui123";
 const char* WiFiManager::DEFAULT_HOSTNAME = "modular-ui";
 
 // Global instance
 WiFiManager* g_wifiManager = nullptr;
+*/
 
+// OLD: Global instance moved to main.cpp with new type (WiFiSetupManager)
+// WiFiManager* g_wifiManager = nullptr;
+
+/*
 WiFiManager::WiFiManager()
     : hostName_(DEFAULT_HOSTNAME)
     , apName_(DEFAULT_AP_NAME)
@@ -27,23 +39,25 @@ WiFiManager::~WiFiManager() {
     }
     preferences_.end();
 }
+*/
 
+/*
 bool WiFiManager::initialize() {
     if (initialized_) {
         return true;
     }
-    
+
     // Scan for WiFi networks first
     scanNetworks();
-    
+
     // Load configuration from preferences
     loadConfiguration();
-    
+
     // Check if we have valid configuration
     preferences_.begin("wifi", true); // Read-only check
     bool hasConfig = preferences_.isKey("host_name");
     preferences_.end();
-    
+
     if (!hasConfig || hostName_.isEmpty()) {
         startAPMode();
     } else {
@@ -51,16 +65,18 @@ bool WiFiManager::initialize() {
             startAPMode();
         }
     }
-    
+
     initialized_ = true;
     return true;
 }
+*/
 
+/*
 void WiFiManager::update() {
     if (!initialized_) {
         return;
     }
-    
+
     // Handle DNS in AP mode
     if (WiFi.getMode() == WIFI_AP || WiFi.getMode() == WIFI_AP_STA) {
         handleDNS();
@@ -83,7 +99,9 @@ String WiFiManager::getIPAddress() const {
 bool WiFiManager::isInSetupMode() const {
     return WiFi.getMode() == WIFI_AP || WiFi.getMode() == WIFI_AP_STA;
 }
+*/
 
+/*
 void WiFiManager::scanNetworks() {
     String bootText = "Scanning WiFi networks...\r\n";
     if (g_bootUI) {
@@ -112,7 +130,9 @@ void WiFiManager::loadConfiguration() {
     }
     preferences_.end();
 }
+*/
 
+/*
 bool WiFiManager::connectToNetwork() {
     String fullHostname = hostName_ + ".local";
     String bootText = "Connecting to '" + wifiSsid_ + "'\r\n";
@@ -170,20 +190,22 @@ bool WiFiManager::connectToNetwork() {
         return false;
     }
 }
+*/
 
+/*
 void WiFiManager::startAPMode() {
     String bootText = "Starting Access Point Mode\r\n";
     if (g_bootUI) {
         g_bootUI->addText(bootText.c_str());
     }
     Serial.println("Starting Access Point Mode");
-    
+
     WiFi.mode(WIFI_AP);
     WiFi.softAP(apName_.c_str(), apPassword_.c_str());
-    
+
     // Start DNS server for captive portal
     dnsServer_.start(53, "*", WiFi.softAPIP());
-    
+
     bootText = "AP Name: " + apName_ + "\r\n";
     if (g_bootUI) {
         g_bootUI->addText(bootText.c_str());
@@ -196,14 +218,14 @@ void WiFiManager::startAPMode() {
     if (g_bootUI) {
         g_bootUI->addText(bootText.c_str());
     }
-    
+
     Serial.print("AP Name: ");
     Serial.println(apName_);
     Serial.print("Password: ");
     Serial.println(apPassword_);
     Serial.print("IP address: ");
     Serial.println(WiFi.softAPIP());
-    
+
     // Clean up boot UI and show AP info screen
     cleanupBootUI();
     lv_obj_clean(lv_scr_act());
@@ -218,7 +240,7 @@ void WiFiManager::startAPMode() {
 
 void WiFiManager::showAPInfoScreen() {
     lv_obj_t* screen = lv_scr_act();
-    
+
     // Create main container
     lv_obj_t* cont = lv_obj_create(screen);
     lv_obj_set_size(cont, LV_PCT(90), LV_PCT(80));
@@ -227,19 +249,19 @@ void WiFiManager::showAPInfoScreen() {
     lv_obj_set_style_border_color(cont, lv_color_hex(UI_COLOR_PRIMARY), 0);
     lv_obj_set_style_border_width(cont, 2, 0);
     lv_obj_set_style_radius(cont, 10, 0);
-    
+
     // Title
     lv_obj_t* title = lv_label_create(cont);
     lv_label_set_text(title, "WiFi Setup Required");
     lv_obj_set_style_text_color(title, lv_color_hex(UI_COLOR_PRIMARY), 0);
     lv_obj_set_style_text_font(title, &lv_font_montserrat_18, 0);
     lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 20);
-    
+
     // Instructions
     lv_obj_t* instructions = lv_label_create(cont);
-    String instructionText = "1. Connect to WiFi network:\n   " + apName_ + 
-                           "\n\n2. Use password:\n   " + apPassword_ + 
-                           "\n\n3. Open web browser and go to:\n   " + getIPAddress() + 
+    String instructionText = "1. Connect to WiFi network:\n   " + apName_ +
+                           "\n\n2. Use password:\n   " + apPassword_ +
+                           "\n\n3. Open web browser and go to:\n   " + getIPAddress() +
                            "\n\n4. Configure your WiFi settings";
     lv_label_set_text(instructions, instructionText.c_str());
     lv_obj_set_style_text_color(instructions, lv_color_hex(UI_COLOR_TEXT), 0);
@@ -255,17 +277,17 @@ void WiFiManager::handleDNS() {
 void WiFiManager::textAreaEventCallback(lv_event_t* e) {
     lv_event_code_t code = lv_event_get_code(e);
     lv_obj_t* ta = static_cast<lv_obj_t*>(lv_event_get_target(e));
-    
+
     if (code == LV_EVENT_FOCUSED && g_wifiManager && g_wifiManager->keyboard_) {
         lv_keyboard_set_textarea(g_wifiManager->keyboard_, ta);
         lv_obj_clear_flag(g_wifiManager->keyboard_, LV_OBJ_FLAG_HIDDEN);
     }
-    
+
     if (code == LV_EVENT_DEFOCUSED && g_wifiManager && g_wifiManager->keyboard_) {
         lv_keyboard_set_textarea(g_wifiManager->keyboard_, NULL);
         lv_obj_add_flag(g_wifiManager->keyboard_, LV_OBJ_FLAG_HIDDEN);
     }
-    
+
     if (code == LV_EVENT_READY) {
         if (g_wifiManager) {
             g_wifiManager->newSsid_ = String(lv_textarea_get_text(ta));
@@ -276,7 +298,7 @@ void WiFiManager::textAreaEventCallback(lv_event_t* e) {
 void WiFiManager::eventHandler(lv_event_t* e) {
     lv_event_code_t code = lv_event_get_code(e);
     lv_obj_t* obj = static_cast<lv_obj_t*>(lv_event_get_target(e));
-    
+
     if (code == LV_EVENT_READY) {
         // Handle keyboard events if needed
         if (g_wifiManager && g_wifiManager->keyboard_) {
@@ -284,3 +306,9 @@ void WiFiManager::eventHandler(lv_event_t* e) {
         }
     }
 }
+*/
+
+// ============================================================================
+// END OF OLD WiFiManager.cpp
+// All code above is commented out and replaced by library version
+// ============================================================================

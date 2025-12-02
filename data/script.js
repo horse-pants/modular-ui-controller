@@ -27,12 +27,17 @@ function onClose(event) {
 function onMessage(event) {
     const data = JSON.parse(event.data);
     console.log(data);
-    
+
+    // Ignore log messages (handled by /logs page)
+    if (data.type === "log") {
+        return;
+    }
+
     if (data.message === "states") {
         data.controls.forEach(control => {
             const element = document.getElementById(control.name);
             if (!element) return;
-            
+
             if (control.state === true) {
                 element.classList.add("active");
                 if (control.name === "animation" && control.animation !== undefined) {

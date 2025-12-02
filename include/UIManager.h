@@ -76,16 +76,28 @@ public:
     void applyCurrentColor();
 
     /**
-     * @brief Set VU button state
+     * @brief Set VU button state (called from web UI)
      * @param newState Whether VU should be active
      */
     void setVuState(bool newState);
 
     /**
-     * @brief Set white button state
+     * @brief Set white button state (called from web UI)
      * @param newState Whether white mode should be active
      */
     void setWhiteState(bool newState);
+
+    /**
+     * @brief Log and update VU state (called from both screen and web)
+     * @param newState Whether VU should be active
+     */
+    void logAndUpdateVuState(bool newState);
+
+    /**
+     * @brief Log and update white state (called from both screen and web)
+     * @param newState Whether white mode should be active
+     */
+    void logAndUpdateWhiteState(bool newState);
 
     /**
      * @brief Set animation state
@@ -135,6 +147,22 @@ public:
      */
     VuGraph* getVuGraph() const { return vuGraph_.get(); }
 
+    /**
+     * @brief Show OTA update screen
+     */
+    void showOTAScreen();
+
+    /**
+     * @brief Update OTA progress on screen
+     * @param progress Progress percentage (0-100)
+     */
+    void updateOTAProgress(uint8_t progress);
+
+    /**
+     * @brief Hide OTA update screen
+     */
+    void hideOTAScreen();
+
 private:
     // UI component instances using smart pointers
     std::unique_ptr<BrightnessSlider> brightnessSlider_;
@@ -149,6 +177,14 @@ private:
     lv_obj_t* tab1_;  // Colour tab
     lv_obj_t* tab2_;  // Effects tab
     lv_obj_t* tab3_;  // VU tab
+
+    // OTA screen objects
+    lv_obj_t* otaScreen_;
+    lv_obj_t* otaLabel_;
+    lv_obj_t* otaBar_;
+    bool otaScreenActive_;
+    uint8_t otaPendingProgress_;
+    bool otaProgressChanged_;
 
     bool initialized_;
     bool screenInitialized_;

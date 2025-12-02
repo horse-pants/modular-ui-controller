@@ -2,6 +2,7 @@
 #include "modular-ui.h"
 #include "ui.h"
 #include <memory>
+#include <Logger.h>
 
 // Global instance definitions
 UIManager* g_uiManager = nullptr;
@@ -139,6 +140,12 @@ UIManager::UIManager()
     , tab1_(nullptr)
     , tab2_(nullptr)
     , tab3_(nullptr)
+    , otaScreen_(nullptr)
+    , otaLabel_(nullptr)
+    , otaBar_(nullptr)
+    , otaScreenActive_(false)
+    , otaPendingProgress_(0)
+    , otaProgressChanged_(false)
     , initialized_(false)
     , screenInitialized_(false)
 {
@@ -159,6 +166,12 @@ UIManager::UIManager(UIManager&& other) noexcept
     , tab1_(other.tab1_)
     , tab2_(other.tab2_)
     , tab3_(other.tab3_)
+    , otaScreen_(other.otaScreen_)
+    , otaLabel_(other.otaLabel_)
+    , otaBar_(other.otaBar_)
+    , otaScreenActive_(other.otaScreenActive_)
+    , otaPendingProgress_(other.otaPendingProgress_)
+    , otaProgressChanged_(other.otaProgressChanged_)
     , initialized_(other.initialized_)
     , screenInitialized_(other.screenInitialized_)
 {
@@ -167,6 +180,12 @@ UIManager::UIManager(UIManager&& other) noexcept
     other.tab1_ = nullptr;
     other.tab2_ = nullptr;
     other.tab3_ = nullptr;
+    other.otaScreen_ = nullptr;
+    other.otaLabel_ = nullptr;
+    other.otaBar_ = nullptr;
+    other.otaScreenActive_ = false;
+    other.otaPendingProgress_ = 0;
+    other.otaProgressChanged_ = false;
     other.initialized_ = false;
     other.screenInitialized_ = false;
 }
@@ -175,7 +194,7 @@ UIManager& UIManager::operator=(UIManager&& other) noexcept {
     if (this != &other) {
         // Clean up current resources
         cleanup();
-        
+
         // Move resources from other
         brightnessSlider_ = std::move(other.brightnessSlider_);
         colourWheel_ = std::move(other.colourWheel_);
@@ -187,14 +206,26 @@ UIManager& UIManager::operator=(UIManager&& other) noexcept {
         tab1_ = other.tab1_;
         tab2_ = other.tab2_;
         tab3_ = other.tab3_;
+        otaScreen_ = other.otaScreen_;
+        otaLabel_ = other.otaLabel_;
+        otaBar_ = other.otaBar_;
+        otaScreenActive_ = other.otaScreenActive_;
+        otaPendingProgress_ = other.otaPendingProgress_;
+        otaProgressChanged_ = other.otaProgressChanged_;
         initialized_ = other.initialized_;
         screenInitialized_ = other.screenInitialized_;
-        
+
         // Reset the moved-from object
         other.tabview_ = nullptr;
         other.tab1_ = nullptr;
         other.tab2_ = nullptr;
         other.tab3_ = nullptr;
+        other.otaScreen_ = nullptr;
+        other.otaLabel_ = nullptr;
+        other.otaBar_ = nullptr;
+        other.otaScreenActive_ = false;
+        other.otaPendingProgress_ = 0;
+        other.otaProgressChanged_ = false;
         other.initialized_ = false;
         other.screenInitialized_ = false;
     }
@@ -261,12 +292,67 @@ void UIManager::update() {
     if (!initialized_) {
         return;
     }
-    
+
+    // Handle OTA screen updates (must be in main loop for LVGL thread safety)
+    if (otaProgressChanged_) {
+        otaProgressChanged_ = false;
+
+        if (otaScreenActive_ && !otaScreen_) {
+            // Create OTA screen
+            otaScreen_ = lv_obj_create(lv_scr_act());
+            lv_obj_set_size(otaScreen_, LV_HOR_RES, LV_VER_RES);
+            lv_obj_set_style_bg_color(otaScreen_, lv_color_hex(UI_COLOR_BACKGROUND), 0);
+            lv_obj_set_style_bg_opa(otaScreen_, LV_OPA_COVER, 0);
+            lv_obj_set_style_border_width(otaScreen_, 0, 0);
+            lv_obj_clear_flag(otaScreen_, LV_OBJ_FLAG_SCROLLABLE);
+
+            // Title label
+            otaLabel_ = lv_label_create(otaScreen_);
+            lv_label_set_text(otaLabel_, "OTA UPDATE\n0%");
+            lv_obj_set_style_text_color(otaLabel_, lv_color_hex(UI_COLOR_PRIMARY), 0);
+            lv_obj_set_style_text_font(otaLabel_, &lv_font_montserrat_32, 0);
+            lv_obj_set_style_text_align(otaLabel_, LV_TEXT_ALIGN_CENTER, 0);
+            lv_obj_align(otaLabel_, LV_ALIGN_CENTER, 0, -60);
+
+            // Progress bar
+            otaBar_ = lv_bar_create(otaScreen_);
+            lv_obj_set_size(otaBar_, 300, 30);
+            lv_obj_align(otaBar_, LV_ALIGN_CENTER, 0, 20);
+            lv_obj_set_style_bg_color(otaBar_, lv_color_hex(UI_COLOR_SURFACE), 0);
+            lv_obj_set_style_bg_color(otaBar_, lv_color_hex(UI_COLOR_PRIMARY), LV_PART_INDICATOR);
+            lv_obj_set_style_border_color(otaBar_, lv_color_hex(UI_COLOR_BORDER), 0);
+            lv_obj_set_style_border_width(otaBar_, 2, 0);
+            lv_obj_set_style_radius(otaBar_, 8, 0);
+            lv_bar_set_range(otaBar_, 0, 100);
+            lv_bar_set_value(otaBar_, 0, LV_ANIM_OFF);
+        } else if (otaScreenActive_ && otaScreen_) {
+            // Update existing OTA screen
+            if (otaBar_) {
+                lv_bar_set_value(otaBar_, otaPendingProgress_, LV_ANIM_OFF);
+            }
+            if (otaLabel_) {
+                char buffer[32];
+                if (otaPendingProgress_ >= 100) {
+                    snprintf(buffer, sizeof(buffer), "OTA UPDATE\nCOMPLETE!");
+                } else {
+                    snprintf(buffer, sizeof(buffer), "OTA UPDATE\n%u%%", otaPendingProgress_);
+                }
+                lv_label_set_text(otaLabel_, buffer);
+            }
+        } else if (!otaScreenActive_ && otaScreen_) {
+            // Cleanup OTA screen
+            lv_obj_del(otaScreen_);
+            otaScreen_ = nullptr;
+            otaLabel_ = nullptr;
+            otaBar_ = nullptr;
+        }
+    }
+
     // Update VU graph if it exists
     if (vuGraph_) {
         vuGraph_->update();
     }
-    
+
     // Process LVGL tasks
     lv_timer_handler();
 }
@@ -293,32 +379,56 @@ void UIManager::applyCurrentColor() {
     }
 }
 
-void UIManager::setVuState(bool newState) {
-    if (vuButton_) {
-        vuButton_->setState(newState);
-    }
-    
+void UIManager::logAndUpdateVuState(bool newState) {
+    Logger.info("VU Button - State: %s", newState ? "ON" : "OFF");
+
+    vu = newState;
+
     // Update LED manager
     extern LEDManager* g_ledManager;
     if (g_ledManager) {
         g_ledManager->setVuMode(newState);
     }
+
+    updateWebUi();
 }
 
-void UIManager::setWhiteState(bool newState) {
-    if (whiteButton_) {
-        whiteButton_->setState(newState);
+void UIManager::logAndUpdateWhiteState(bool newState) {
+    Logger.info("White Button - State: %s", newState ? "ON" : "OFF");
+
+    white = newState;
+
+    if (newState) {
+        showAnimation = false;
+        fillWhite();
     }
-    
+
     // Update LED manager
     extern LEDManager* g_ledManager;
     if (g_ledManager) {
         g_ledManager->setWhiteMode(newState);
         if (newState) {
-            // Disable animations when white mode is enabled
             g_ledManager->setAnimationEnabled(false);
             showAnimation = false;
         }
+    }
+
+    updateWebUi();
+}
+
+void UIManager::setVuState(bool newState) {
+    logAndUpdateVuState(newState);
+
+    if (vuButton_) {
+        vuButton_->setState(newState);
+    }
+}
+
+void UIManager::setWhiteState(bool newState) {
+    logAndUpdateWhiteState(newState);
+
+    if (whiteButton_) {
+        whiteButton_->setState(newState);
     }
 }
 
@@ -546,13 +656,21 @@ void UIManager::cleanup() {
     whiteButton_.reset();
     vuButton_.reset();
     vuGraph_.reset();
-    
+
     // Clean up LVGL objects
     if (tabview_) {
         lv_obj_del(tabview_);
         tabview_ = nullptr;
     }
-    
+
+    // Clean up OTA screen if it exists
+    if (otaScreen_) {
+        lv_obj_del(otaScreen_);
+        otaScreen_ = nullptr;
+        otaLabel_ = nullptr;
+        otaBar_ = nullptr;
+    }
+
     tab1_ = nullptr;
     tab2_ = nullptr;
     tab3_ = nullptr;
@@ -565,4 +683,24 @@ void UIManager::scrollBeginEvent(lv_event_t* e) {
         lv_anim_t* a = (lv_anim_t*)lv_event_get_param(e);
         if (a) lv_anim_set_duration(a, 0);
     }
+}
+
+void UIManager::showOTAScreen() {
+    // Just set flag - actual screen creation happens in update()
+    otaScreenActive_ = true;
+    otaPendingProgress_ = 0;
+    otaProgressChanged_ = true;
+    g_ledManager->fillColor(CRGB(0, 0, 0));
+}
+
+void UIManager::updateOTAProgress(uint8_t progress) {
+    // Just set flag - actual update happens in update()
+    otaPendingProgress_ = progress;
+    otaProgressChanged_ = true;
+}
+
+void UIManager::hideOTAScreen() {
+    // Just set flag - actual cleanup happens in update()
+    otaScreenActive_ = false;
+    otaProgressChanged_ = true;
 }

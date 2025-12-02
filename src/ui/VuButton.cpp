@@ -1,6 +1,7 @@
 #include "VuButton.h"
 #include "modular-ui.h"
 #include "ui.h"
+#include "UIManager.h"
 
 VuButton::VuButton()
     : button_(nullptr)
@@ -127,14 +128,20 @@ void VuButton::handleStateChange() {
     if (!initialized_ || !button_) {
         return;
     }
-    
+
     // Toggle state
     currentState_ = !currentState_;
-    vu = currentState_; // Update global state
-    
-    // Update web UI
-    updateWebUi();
-    
+
+    // Call UIManager's simple helper
+    extern UIManager* g_uiManager;
+    if (g_uiManager) {
+        g_uiManager->logAndUpdateVuState(currentState_);
+    } else {
+        // Fallback if UIManager not available
+        vu = currentState_;
+        updateWebUi();
+    }
+
     // Call user callback if set
     if (callback_) {
         callback_(currentState_);

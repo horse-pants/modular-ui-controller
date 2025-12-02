@@ -41,6 +41,7 @@ LEDManager::LEDManager()
     , whiteMode_(false)
     , currentAnimation_(RAINBOW)
     , audioLevel_(0)
+    , lastOTAProgress_(255)  // Invalid value to force first update
     , lastAnimationUpdate_(0)
 {
     // Initialize VU levels array
@@ -125,23 +126,75 @@ void LEDManager::performStartupFadeIn() {
     if (!initialized_ || !isConfigValid() || !leds_) {
         return;
     }
-    
-    // Startup sequence - fade in red from black  
+
+    // Startup sequence - fade in red from black
     // Ensure we have a minimum brightness for the fade-in
     uint8_t targetBrightness = brightness_;
     if (targetBrightness < 64) {
         targetBrightness = 128; // Default to 128 if somehow set too low
     }
-    
+
     fillColor(CRGB::Red);
     for (int i = 0; i <= targetBrightness; i++) {
         FastLED.setBrightness(i);
         FastLED.show();
         delay(25);
     }
-    
+
     // Keep red color visible after fade-in
     fillColor(CRGB::Red);
+    FastLED.show();
+}
+
+void LEDManager::showOTAProgress(uint8_t progress) {
+    if (!initialized_ || !isConfigValid() || !leds_) {
+        return;
+    }
+
+    // Clamp progress to 0-100
+    if (progress > 100) {
+        progress = 100;
+    }
+
+    // Only update if progress changed to reduce jitter
+    if (progress == lastOTAProgress_) {
+        return;
+    }
+    lastOTAProgress_ = progress;
+
+    // Calculate how many LEDs per strip should be lit based on progress
+    int ledsPerStripToLight = (ledsPerStrip_ * progress) / 100;
+
+    // Fill each strip left to right in unison
+    // Account for daisy-chaining: even strips (0,2,4...) are reversed
+    for (int strip = 0; strip < numStrips_; strip++) {
+        int stripStart = strip * ledsPerStrip_;
+        bool reversed = (strip % 2 == 0); // Even strips are reversed
+
+        for (int led = 0; led < ledsPerStripToLight; led++) {
+            // Gradient from cyan (start) to green (end) based on position in strip
+            uint8_t ratio = (led * 255) / ledsPerStrip_;
+
+            // Calculate LED index based on direction
+            int ledIndex;
+            if (reversed) {
+                ledIndex = stripStart + (ledsPerStrip_ - 1 - led); // Fill from right to left
+            } else {
+                ledIndex = stripStart + led; // Fill from left to right
+            }
+
+            leds_[ledIndex] = CHSV(96 + (ratio / 4), 255, 255); // Cyan (96) to green (128)
+        }
+    }
+
+    // Flash all LEDs green when complete
+    if (progress >= 100) {
+        for (int i = 0; i < totalLeds_; i++) {
+            leds_[i] = CRGB::Green;
+        }
+    }
+
+    FastLED.setBrightness(150); // Full brightness for OTA progress
     FastLED.show();
 }
 

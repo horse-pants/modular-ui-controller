@@ -1,7 +1,7 @@
 #include "WhiteButton.h"
+#include "UIManager.h"
 #include "modular-ui.h"
 #include "ui.h"
-#include "UIManager.h"
 
 WhiteButton::WhiteButton()
     : button_(nullptr)
@@ -134,36 +134,24 @@ void WhiteButton::handleStateChange() {
     if (!initialized_ || !button_) {
         return;
     }
-    
+
     // Toggle state
     currentState_ = !currentState_;
-    white = currentState_; // Update global state
-    
-    if (currentState_) {
-        showAnimation = false;
-        fillWhite();
-        
-        // Update LED manager
-        extern LEDManager* g_ledManager;
-        if (g_ledManager) {
-            g_ledManager->setAnimationEnabled(false);
-            g_ledManager->setWhiteMode(true);
-        }
+
+    // Call UIManager's simple helper
+    extern UIManager* g_uiManager;
+    if (g_uiManager) {
+        g_uiManager->logAndUpdateWhiteState(currentState_);
     } else {
-        if (g_uiManager) {
-            g_uiManager->applyCurrentColor();
+        // Fallback if UIManager not available
+        white = currentState_;
+        if (currentState_) {
+            showAnimation = false;
+            fillWhite();
         }
-        
-        // Update LED manager
-        extern LEDManager* g_ledManager;
-        if (g_ledManager) {
-            g_ledManager->setWhiteMode(false);
-        }
+        updateWebUi();
     }
-    
-    // Update web UI
-    updateWebUi();
-    
+
     // Call user callback if set
     if (callback_) {
         callback_(currentState_);
