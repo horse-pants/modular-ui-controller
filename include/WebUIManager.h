@@ -4,10 +4,6 @@
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
 
-// Configure LittleFS block/page size to match mklittlefs build parameters
-// Build uses: -p 256 -b 4096
-#define CONFIG_LITTLEFS_BLOCK_SIZE 4096
-#define CONFIG_LITTLEFS_PAGE_SIZE 256
 #include <LittleFS.h>
 
 #include <WiFi.h>

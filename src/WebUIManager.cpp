@@ -113,7 +113,7 @@ bool WebUIManager::initialize() {
         });
 
         // Initialize OTA with the shared server
-        g_otaManager->begin(server_);
+        g_otaManager->begin(server_, "", "", "spiffs");
     }
 
     // NOTE: server_->begin() is called by WiFiSetupManager, not here
@@ -168,6 +168,7 @@ bool WebUIManager::initializeLittleFS() {
     }
 
     // Check if files exist, write from PROGMEM if missing
+    // NOTE: This now just logs that files are loaded from LittleFS image
     writeEmbeddedFilesToFS();
 
     Logger.debug("Files in LittleFS:");
@@ -185,6 +186,12 @@ bool WebUIManager::initializeLittleFS() {
 }
 
 void WebUIManager::writeEmbeddedFilesToFS() {
+    // NOTE: This function is no longer used - web files are now uploaded directly
+    // to the LittleFS partition via PlatformIO's build filesystem feature.
+    // The pre_build_littlefs.py script ensures mklittlefs is available in PATH.
+    Logger.debug("writeEmbeddedFilesToFS: Skipped (files loaded from LittleFS image)");
+
+    /* ORIGINAL CODE - Commented out but kept for reference
     #include "WebFilesData.h"
 
     struct WebFile {
@@ -247,6 +254,7 @@ void WebUIManager::writeEmbeddedFilesToFS() {
     } else {
         Logger.debug("All web files are up to date");
     }
+    */
 }
 
 void WebUIManager::initializeWebSocket() {

@@ -6,7 +6,9 @@
       "WebFetch(domain:forum.lvgl.io)",
       "WebFetch(domain:github.com)",
       "WebFetch(domain:randomnerdtutorials.com)",
-      "WebFetch(domain:stackoverflow.com)"
+      "WebFetch(domain:stackoverflow.com)",
+      "Bash(test:*)",
+      "Bash(md5sum:*)"
     ],
     "deny": [],
     "ask": []
