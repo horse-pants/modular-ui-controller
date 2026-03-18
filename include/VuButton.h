@@ -49,13 +49,10 @@ public:
 
     /**
      * @brief Initialize the VU button on the specified parent object
-     * @param parent The parent LVGL object (usually a tab)
-     * @param width Width of the button in pixels
-     * @param xOffset X offset from right position
-     * @param yOffset Y offset from top position
+     * @param parent The parent LVGL object (layout handled by parent)
      * @return true if initialization was successful, false otherwise
      */
-    bool initialize(lv_obj_t* parent, lv_coord_t width = 100, lv_coord_t xOffset = -20, lv_coord_t yOffset = 10);
+    bool initialize(lv_obj_t* parent);
 
     /**
      * @brief Set the state change callback function

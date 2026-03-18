@@ -70,44 +70,50 @@ void BrightnessSlider::initializeStyles() {
     if (stylesInitialized_) {
         return;
     }
-    
-    // Initialize indicator style
+
+    // === INDICATOR STYLE - Bright cyan fill ===
     lv_style_init(&indicatorStyle_);
     lv_style_set_bg_opa(&indicatorStyle_, LV_OPA_COVER);
     lv_style_set_bg_color(&indicatorStyle_, lv_color_hex(UI_COLOR_PRIMARY));
     lv_style_set_bg_grad_color(&indicatorStyle_, lv_color_hex(UI_COLOR_PRIMARY_DARK));
-    lv_style_set_bg_grad_dir(&indicatorStyle_, LV_GRAD_DIR_HOR);
-    lv_style_set_radius(&indicatorStyle_, 3);
-    
-    // Initialize knob style
+    lv_style_set_bg_grad_dir(&indicatorStyle_, LV_GRAD_DIR_VER);
+    lv_style_set_radius(&indicatorStyle_, UI_RADIUS_SMALL);
+
+    // === KNOB STYLE - High contrast, visible knob ===
     lv_style_init(&knobStyle_);
-    lv_style_set_bg_color(&knobStyle_, lv_color_hex(UI_COLOR_PRIMARY));
-    lv_style_set_bg_grad_color(&knobStyle_, lv_color_hex(UI_COLOR_PRIMARY_DARK));
+    lv_style_set_bg_color(&knobStyle_, lv_color_hex(UI_COLOR_WHITE));
+    lv_style_set_bg_grad_color(&knobStyle_, lv_color_hex(UI_COLOR_TEXT));
     lv_style_set_bg_grad_dir(&knobStyle_, LV_GRAD_DIR_VER);
-    lv_style_set_radius(&knobStyle_, 12);
-    lv_style_set_width(&knobStyle_, 24);
-    lv_style_set_height(&knobStyle_, 24);
+    lv_style_set_radius(&knobStyle_, UI_RADIUS_SMALL);
+    lv_style_set_width(&knobStyle_, 44);
+    lv_style_set_height(&knobStyle_, 16);
     lv_style_set_border_color(&knobStyle_, lv_color_hex(UI_COLOR_PRIMARY));
-    lv_style_set_border_width(&knobStyle_, 2);
-    
+    lv_style_set_border_width(&knobStyle_, UI_BORDER_NORMAL);
+
     stylesInitialized_ = true;
 }
 
 void BrightnessSlider::createLabel() {
-    label_ = lv_label_create(parentTab_);
-    if (label_) {
-        lv_label_set_text(label_, "BRIGHTNESS");
-        lv_obj_set_style_text_color(label_, lv_color_hex(UI_COLOR_PRIMARY), 0);
-    }
+    // Label created separately - parent container handles it for vertical layout
+    label_ = nullptr;
 }
 
 void BrightnessSlider::createSlider() {
     slider_ = lv_slider_create(parentTab_);
     if (slider_) {
-        lv_obj_set_width(slider_, 120);
-        lv_obj_set_height(slider_, 6);
+        // Vertical fader: height > width
+        // Track is narrow but we add padding for touch area
+        lv_obj_set_width(slider_, 24);
+        lv_obj_set_height(slider_, 200);
         lv_slider_set_range(slider_, 0, maxBrightness_);
-        
+
+        // Extend draw area so knob isn't clipped at top/bottom
+        lv_obj_set_style_pad_top(slider_, 20, 0);
+        lv_obj_set_style_pad_bottom(slider_, 8, 0);
+
+        // Wider touch/click area (extends beyond visible track)
+        lv_obj_set_ext_click_area(slider_, 20);
+
         // Set user data to this instance for event handling
         lv_obj_set_user_data(slider_, this);
         lv_obj_add_event_cb(slider_, eventHandlerWrapper, LV_EVENT_VALUE_CHANGED, nullptr);
@@ -116,16 +122,19 @@ void BrightnessSlider::createSlider() {
 
 void BrightnessSlider::applySliderStyling() {
     if (!slider_) return;
-    
+
     // Initialize styles if not done yet
     initializeStyles();
-    
-    // Style the slider background (track)
-    lv_obj_set_style_bg_color(slider_, lv_color_hex(0x333333), 0);
-    lv_obj_set_style_bg_grad_color(slider_, lv_color_hex(0x555555), 0);
+
+    // === TRACK STYLE - Metallic recessed look ===
+    lv_obj_set_style_bg_color(slider_, lv_color_hex(UI_COLOR_SURFACE_DARK), 0);
+    lv_obj_set_style_bg_grad_color(slider_, lv_color_hex(UI_COLOR_TRACK), 0);
     lv_obj_set_style_bg_grad_dir(slider_, LV_GRAD_DIR_HOR, 0);
-    lv_obj_set_style_radius(slider_, 3, 0);
-    
+    lv_obj_set_style_radius(slider_, UI_RADIUS_SMALL, 0);
+    lv_obj_set_style_border_color(slider_, lv_color_hex(UI_COLOR_BORDER), 0);
+    lv_obj_set_style_border_width(slider_, UI_BORDER_THIN, 0);
+    lv_obj_set_style_border_side(slider_, LV_BORDER_SIDE_FULL, 0);
+
     // Apply indicator and knob styles
     lv_obj_add_style(slider_, &indicatorStyle_, LV_PART_INDICATOR);
     lv_obj_add_style(slider_, &knobStyle_, LV_PART_KNOB);
@@ -152,41 +161,39 @@ void BrightnessSlider::handleSliderEvent(lv_event_t* e) {
     }
 }
 
-bool BrightnessSlider::initialize(lv_obj_t* parentTab, int x, int y, int initialBrightness) {
-    if (initialized_ || !parentTab) {
+bool BrightnessSlider::initialize(lv_obj_t* parent, int initialBrightness) {
+    if (initialized_ || !parent) {
         return false;
     }
-    
-    parentTab_ = parentTab;
-    
+
+    parentTab_ = parent;
+
     try {
-        // Create UI elements
+        // Create UI elements (they add themselves to parentTab_)
         createLabel();
         createSlider();
-        
+
         // Check if creation was successful
-        if (!slider_ || !label_) {
+        if (!slider_) {
             cleanup();
             return false;
         }
-        
-        // Position elements
-        lv_obj_align(label_, LV_ALIGN_TOP_LEFT, x, y);
-        lv_obj_align(slider_, LV_ALIGN_TOP_LEFT, x, y + 20);
-        
+
+        // No positioning - parent's layout handles arrangement
+
         // Apply styling
         applySliderStyling();
-        
+
         // Mark as initialized before setting initial value
         initialized_ = true;
-        
+
         // Set initial brightness
         setBrightness(initialBrightness, false);
-        
+
         return true;
-        
+
     } catch (...) {
-        initialized_ = false;  // Reset flag before cleanup
+        initialized_ = false;
         cleanup();
         return false;
     }

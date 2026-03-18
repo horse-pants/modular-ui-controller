@@ -48,15 +48,15 @@ WhiteButton& WhiteButton::operator=(WhiteButton&& other) noexcept {
     return *this;
 }
 
-bool WhiteButton::initialize(lv_obj_t* parent, lv_coord_t width, lv_coord_t xOffset, lv_coord_t yOffset) {
+bool WhiteButton::initialize(lv_obj_t* parent) {
     if (initialized_) {
-        return true; // Already initialized
+        return true;
     }
-    
+
     if (!parent) {
-        return false; // Invalid parent
+        return false;
     }
-    
+
     try {
         // Create the button
         button_ = lv_btn_create(parent);
@@ -64,10 +64,8 @@ bool WhiteButton::initialize(lv_obj_t* parent, lv_coord_t width, lv_coord_t xOff
             return false;
         }
 
-        // Set size and position
-        lv_obj_set_width(button_, width);
-        lv_obj_set_height(button_, LV_SIZE_CONTENT);
-        lv_obj_align(button_, LV_ALIGN_BOTTOM_MID, xOffset, yOffset);
+        // Size only - no positioning (parent layout handles it)
+        lv_obj_set_size(button_, UI_BTN_COMPACT_WIDTH + 10, UI_BTN_HEIGHT);
         lv_obj_add_flag(button_, LV_OBJ_FLAG_CHECKABLE);
 
         // Apply styling
@@ -81,13 +79,13 @@ bool WhiteButton::initialize(lv_obj_t* parent, lv_coord_t width, lv_coord_t xOff
         // Set user data and event callback
         lv_obj_set_user_data(button_, this);
         lv_obj_add_event_cb(button_, eventHandler, LV_EVENT_ALL, nullptr);
-        
+
         initialized_ = true;
         currentState_ = false;
         return true;
-        
+
     } catch (...) {
-        cleanup(); // Clean up on any exception
+        cleanup();
         return false;
     }
 }
@@ -173,23 +171,25 @@ void WhiteButton::applyButtonStyling() {
     if (!button_) {
         return;
     }
-    
-    // Apply synth button styling
+
+    // === INACTIVE STATE - Dark hardware button ===
     lv_obj_set_style_bg_color(button_, lv_color_hex(UI_COLOR_SURFACE_LIGHT), 0);
-    lv_obj_set_style_bg_grad_color(button_, lv_color_hex(UI_COLOR_SURFACE), 0);
+    lv_obj_set_style_bg_grad_color(button_, lv_color_hex(UI_COLOR_SURFACE_DARK), 0);
     lv_obj_set_style_bg_grad_dir(button_, LV_GRAD_DIR_VER, 0);
     lv_obj_set_style_border_color(button_, lv_color_hex(UI_COLOR_BORDER), 0);
-    lv_obj_set_style_border_width(button_, 2, 0);
-    lv_obj_set_style_radius(button_, 12, 0);
-    lv_obj_set_style_text_color(button_, lv_color_hex(UI_COLOR_TEXT), 0);
-    
-    // Active state styling (matches web UI green)
-    lv_obj_set_style_bg_color(button_, lv_color_hex(UI_COLOR_PRIMARY), LV_STATE_CHECKED);
-    lv_obj_set_style_bg_grad_color(button_, lv_color_hex(UI_COLOR_PRIMARY_DARK), LV_STATE_CHECKED);
+    lv_obj_set_style_border_width(button_, UI_BORDER_NORMAL, 0);
+    lv_obj_set_style_radius(button_, UI_RADIUS_MEDIUM, 0);
+    lv_obj_set_style_text_color(button_, lv_color_hex(UI_COLOR_TEXT_MUTED), 0);
+
+    // === ACTIVE STATE - Bright white, thick bright border (simulates glow) ===
+    lv_obj_set_style_bg_color(button_, lv_color_hex(UI_COLOR_WHITE), LV_STATE_CHECKED);
+    lv_obj_set_style_bg_grad_color(button_, lv_color_hex(UI_COLOR_TEXT), LV_STATE_CHECKED);
     lv_obj_set_style_border_color(button_, lv_color_hex(UI_COLOR_PRIMARY), LV_STATE_CHECKED);
+    lv_obj_set_style_border_width(button_, UI_BORDER_THICK, LV_STATE_CHECKED);
     lv_obj_set_style_text_color(button_, lv_color_hex(UI_COLOR_BLACK), LV_STATE_CHECKED);
-    
-    // Hover effect
-    lv_obj_set_style_border_color(button_, lv_color_hex(UI_COLOR_PRIMARY), LV_STATE_PRESSED);
-    lv_obj_set_style_text_color(button_, lv_color_hex(UI_COLOR_PRIMARY), LV_STATE_PRESSED);
+
+    // === PRESSED STATE - Feedback ===
+    lv_obj_set_style_bg_color(button_, lv_color_hex(UI_COLOR_TEXT), LV_STATE_PRESSED);
+    lv_obj_set_style_border_color(button_, lv_color_hex(UI_COLOR_WHITE), LV_STATE_PRESSED);
+    lv_obj_set_style_text_color(button_, lv_color_hex(UI_COLOR_BLACK), LV_STATE_PRESSED);
 }

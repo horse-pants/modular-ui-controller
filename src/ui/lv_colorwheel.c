@@ -321,18 +321,10 @@ static void lv_colorwheel_event(const lv_obj_class_t * class_p, lv_event_t * e)
     lv_colorwheel_t * colorwheel = (lv_colorwheel_t *)obj;
 
     if(code == LV_EVENT_REFR_EXT_DRAW_SIZE) {
-        lv_coord_t left   = lv_obj_get_style_pad_left(obj,   LV_PART_KNOB);
-        lv_coord_t right  = lv_obj_get_style_pad_right(obj,  LV_PART_KNOB);
-        lv_coord_t top    = lv_obj_get_style_pad_top(obj,    LV_PART_KNOB);
-        lv_coord_t bottom = lv_obj_get_style_pad_bottom(obj, LV_PART_KNOB);
-
-        /* Account for knob extending past the arc (radius is arc_width * 0.8, not arc_width / 2) */
-        lv_coord_t arc_w = lv_obj_get_style_arc_width(obj, LV_PART_MAIN);
-        lv_coord_t knob_extend = (arc_w * 3) / 10;  /* Extra extension: 0.8 - 0.5 = 0.3 */
-
-        lv_coord_t knob_pad = LV_MAX4(left, right, top, bottom) + knob_extend + 2;
+        /* Knob radius is arc_width * 0.8, which can extend well past widget bounds.
+         * Use a generous fixed extension to ensure the indicator is never clipped. */
         lv_coord_t * s = lv_event_get_param(e);
-        *s = LV_MAX(*s, knob_pad);
+        *s = LV_MAX(*s, 25);
     }
     else if(code == LV_EVENT_SIZE_CHANGED) {
         const lv_area_t * old = lv_event_get_old_size(e);

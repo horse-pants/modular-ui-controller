@@ -68,15 +68,13 @@ public:
     BrightnessSlider& operator=(BrightnessSlider&& other) noexcept;
     
     /**
-     * @brief Initialize the brightness slider on a parent tab
-     * 
-     * @param parentTab The parent tab container
-     * @param x X position relative to parent
-     * @param y Y position relative to parent
+     * @brief Initialize the brightness slider on a parent container
+     *
+     * @param parent The parent container (layout handled by parent)
      * @param initialBrightness Initial brightness value
      * @return true if initialization successful, false otherwise
      */
-    bool initialize(lv_obj_t* parentTab, int x = 20, int y = 10, int initialBrightness = 100);
+    bool initialize(lv_obj_t* parent, int initialBrightness = 100);
     
     /**
      * @brief Set brightness value programmatically

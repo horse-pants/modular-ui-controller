@@ -13,6 +13,64 @@ WhiteButton* g_whiteButton = nullptr;
 VuButton* g_vuButton = nullptr;
 VuGraph* g_vuGraph = nullptr;
 
+// Static style definitions
+lv_style_t UIManager::stylePanelMain_;
+lv_style_t UIManager::stylePanelInset_;
+lv_style_t UIManager::styleSectionLabel_;
+bool UIManager::stylesInitialized_ = false;
+
+void UIManager::initStyles() {
+    if (stylesInitialized_) return;
+
+    // Panel main style - raised hardware module look
+    lv_style_init(&stylePanelMain_);
+    lv_style_set_bg_color(&stylePanelMain_, lv_color_hex(UI_COLOR_SURFACE));
+    lv_style_set_bg_opa(&stylePanelMain_, LV_OPA_COVER);
+    lv_style_set_border_color(&stylePanelMain_, lv_color_hex(UI_COLOR_BORDER));
+    lv_style_set_border_width(&stylePanelMain_, UI_BORDER_NORMAL);
+    lv_style_set_border_opa(&stylePanelMain_, LV_OPA_COVER);
+    lv_style_set_radius(&stylePanelMain_, UI_RADIUS_MEDIUM);
+    lv_style_set_pad_all(&stylePanelMain_, UI_PADDING_MEDIUM);
+
+    // Panel inset style - darker recessed area
+    lv_style_init(&stylePanelInset_);
+    lv_style_set_bg_color(&stylePanelInset_, lv_color_hex(UI_COLOR_SURFACE_DARK));
+    lv_style_set_bg_opa(&stylePanelInset_, LV_OPA_COVER);
+    lv_style_set_border_color(&stylePanelInset_, lv_color_hex(UI_COLOR_BORDER));
+    lv_style_set_border_width(&stylePanelInset_, UI_BORDER_THIN);
+    lv_style_set_border_side(&stylePanelInset_, LV_BORDER_SIDE_FULL);
+    lv_style_set_radius(&stylePanelInset_, UI_RADIUS_SMALL);
+    lv_style_set_pad_all(&stylePanelInset_, UI_PADDING_SMALL);
+
+    // Section label style
+    lv_style_init(&styleSectionLabel_);
+    lv_style_set_text_color(&styleSectionLabel_, lv_color_hex(UI_COLOR_TEXT_MUTED));
+    lv_style_set_text_font(&styleSectionLabel_, &lv_font_montserrat_12);
+    lv_style_set_pad_bottom(&styleSectionLabel_, UI_PADDING_SMALL);
+
+    stylesInitialized_ = true;
+}
+
+lv_obj_t* UIManager::createPanel(lv_obj_t* parent) {
+    initStyles();
+
+    lv_obj_t* panel = lv_obj_create(parent);
+    lv_obj_add_style(panel, &stylePanelMain_, 0);
+    lv_obj_clear_flag(panel, LV_OBJ_FLAG_SCROLLABLE);
+
+    return panel;
+}
+
+lv_obj_t* UIManager::createSectionLabel(lv_obj_t* parent, const char* text) {
+    initStyles();
+
+    lv_obj_t* label = lv_label_create(parent);
+    lv_label_set_text(label, text);
+    lv_obj_add_style(label, &styleSectionLabel_, 0);
+
+    return label;
+}
+
 // LGFX Display class - moved from ui.cpp
 class MyLGFX : public lgfx::LGFX_Device {
     lgfx::Panel_ST7796 _panel_instance;
@@ -139,7 +197,6 @@ UIManager::UIManager()
     , tabview_(nullptr)
     , tab1_(nullptr)
     , tab2_(nullptr)
-    , tab3_(nullptr)
     , otaScreen_(nullptr)
     , otaLabel_(nullptr)
     , otaBar_(nullptr)
@@ -165,7 +222,6 @@ UIManager::UIManager(UIManager&& other) noexcept
     , tabview_(other.tabview_)
     , tab1_(other.tab1_)
     , tab2_(other.tab2_)
-    , tab3_(other.tab3_)
     , otaScreen_(other.otaScreen_)
     , otaLabel_(other.otaLabel_)
     , otaBar_(other.otaBar_)
@@ -179,7 +235,6 @@ UIManager::UIManager(UIManager&& other) noexcept
     other.tabview_ = nullptr;
     other.tab1_ = nullptr;
     other.tab2_ = nullptr;
-    other.tab3_ = nullptr;
     other.otaScreen_ = nullptr;
     other.otaLabel_ = nullptr;
     other.otaBar_ = nullptr;
@@ -205,7 +260,6 @@ UIManager& UIManager::operator=(UIManager&& other) noexcept {
         tabview_ = other.tabview_;
         tab1_ = other.tab1_;
         tab2_ = other.tab2_;
-        tab3_ = other.tab3_;
         otaScreen_ = other.otaScreen_;
         otaLabel_ = other.otaLabel_;
         otaBar_ = other.otaBar_;
@@ -219,7 +273,6 @@ UIManager& UIManager::operator=(UIManager&& other) noexcept {
         other.tabview_ = nullptr;
         other.tab1_ = nullptr;
         other.tab2_ = nullptr;
-        other.tab3_ = nullptr;
         other.otaScreen_ = nullptr;
         other.otaLabel_ = nullptr;
         other.otaBar_ = nullptr;
@@ -368,8 +421,14 @@ void UIManager::applyCurrentColor() {
             whiteButton_->setState(false, false);
         }
         white = false;
+
+        // Deactivate effects dropdown (color is now active, not animation)
+        if (effectsList_) {
+            effectsList_->setActiveState(false);
+        }
+
         updateWebUi();
-        
+
         // Update LED manager
         extern LEDManager* g_ledManager;
         if (g_ledManager) {
@@ -401,6 +460,10 @@ void UIManager::logAndUpdateWhiteState(bool newState) {
     if (newState) {
         showAnimation = false;
         fillWhite();
+        // Deactivate effects dropdown styling when white is on
+        if (effectsList_) {
+            effectsList_->setActiveState(false);
+        }
     }
 
     // Update LED manager
@@ -454,6 +517,7 @@ void UIManager::setAnimationState(bool newState) {
 void UIManager::setAnimation(int animation) {
     if (effectsList_) {
         effectsList_->setSelectedEffect(animation, false);
+        effectsList_->setActiveState(true);  // Highlight as active
     }
     showAnimation = true;
     currentAnimation = static_cast<animationOptions>(animation);
@@ -462,7 +526,7 @@ void UIManager::setAnimation(int animation) {
     }
     white = false;
     FastLED.clear();
-    
+
     // Update LED manager
     extern LEDManager* g_ledManager;
     if (g_ledManager) {
@@ -489,59 +553,102 @@ bool UIManager::createTabview() {
     lv_tabview_set_tab_bar_position(tabview_, LV_DIR_TOP);
     lv_tabview_set_tab_bar_size(tabview_, 50);
     
-    lv_obj_clear_flag(lv_tabview_get_content(tabview_), LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_add_event_cb(lv_tabview_get_content(tabview_), scrollBeginEvent, LV_EVENT_SCROLL_BEGIN, NULL);
+    lv_obj_t* tabContent = lv_tabview_get_content(tabview_);
+    lv_obj_clear_flag(tabContent, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(tabContent, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
+    lv_obj_add_event_cb(tabContent, scrollBeginEvent, LV_EVENT_SCROLL_BEGIN, NULL);
 
-    // Style the tabview with synth theme
+    // Style the tabview with synth theme - hardware module look
     lv_obj_set_style_bg_color(tabview_, lv_color_hex(UI_COLOR_SURFACE), 0);
     lv_obj_set_style_bg_opa(tabview_, LV_OPA_COVER, 0);
-    
-    lv_obj_set_style_border_width(tabview_, 3, 0);
-    lv_obj_set_style_border_color(tabview_, lv_color_hex(UI_COLOR_PRIMARY), 0);
+    lv_obj_set_style_border_width(tabview_, UI_BORDER_NORMAL, 0);
+    lv_obj_set_style_border_color(tabview_, lv_color_hex(UI_COLOR_BORDER), 0);
     lv_obj_set_style_border_opa(tabview_, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(tabview_, UI_RADIUS_MEDIUM, 0);
+    lv_obj_add_flag(tabview_, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
 
-    // Create tabs
+    // Create tabs (Effects moved to dropdown on Colour tab)
     tab1_ = lv_tabview_add_tab(tabview_, "Colour");
-    tab2_ = lv_tabview_add_tab(tabview_, "Effects");
-    tab3_ = lv_tabview_add_tab(tabview_, "VU");
-    
-    if (!tab1_ || !tab2_ || !tab3_) {
+    tab2_ = lv_tabview_add_tab(tabview_, "VU");
+
+    if (!tab1_ || !tab2_) {
         return false;
     }
-    
+
     // Style individual tabs
     lv_obj_set_style_bg_color(tab1_, lv_color_hex(UI_COLOR_SURFACE), 0);
     lv_obj_set_style_bg_color(tab2_, lv_color_hex(UI_COLOR_SURFACE), 0);
-    lv_obj_set_style_bg_color(tab3_, lv_color_hex(UI_COLOR_SURFACE), 0);
     
-    // Style tab bar container (LVGL 9 uses buttons, not btnmatrix)
+    // === TAB BAR - Hardware selector style ===
     lv_obj_t* tab_bar = lv_tabview_get_tab_bar(tabview_);
     lv_obj_set_style_bg_color(tab_bar, lv_color_hex(UI_COLOR_SURFACE), 0);
-    lv_obj_set_style_border_color(tab_bar, lv_color_hex(UI_COLOR_PRIMARY), 0);
-    lv_obj_set_style_border_width(tab_bar, 2, 0);
+    lv_obj_set_style_border_color(tab_bar, lv_color_hex(UI_COLOR_BORDER), 0);
+    lv_obj_set_style_border_width(tab_bar, UI_BORDER_NORMAL, 0);
+    lv_obj_set_style_border_side(tab_bar, LV_BORDER_SIDE_BOTTOM, 0);
+    lv_obj_set_style_pad_all(tab_bar, UI_PADDING_SMALL, 0);
 
-    // Style each tab button child
+    // Style each tab button
     uint32_t child_count = lv_obj_get_child_count(tab_bar);
     for (uint32_t i = 0; i < child_count; i++) {
         lv_obj_t* btn = lv_obj_get_child(tab_bar, i);
-        // Inactive state - white text on dark surface
+
+        // === INACTIVE STATE - Light text on dark background ===
         lv_obj_set_style_bg_color(btn, lv_color_hex(UI_COLOR_SURFACE), 0);
-        lv_obj_set_style_text_color(btn, lv_color_hex(0xFFFFFF), 0);
-        lv_obj_set_style_border_width(btn, 0, 0);
-        lv_obj_set_style_shadow_width(btn, 0, 0);
-        // Active/checked state - white text on cyan
+        lv_obj_set_style_text_color(btn, lv_color_hex(UI_COLOR_TEXT), 0);  // Bright white text
+        lv_obj_set_style_border_color(btn, lv_color_hex(UI_COLOR_BORDER), 0);
+        lv_obj_set_style_border_width(btn, UI_BORDER_THIN, 0);
+        lv_obj_set_style_radius(btn, UI_RADIUS_SMALL, 0);
+
+        // === ACTIVE/CHECKED STATE - Cyan background, white text ===
         lv_obj_set_style_bg_color(btn, lv_color_hex(UI_COLOR_PRIMARY), LV_STATE_CHECKED);
         lv_obj_set_style_text_color(btn, lv_color_hex(UI_COLOR_WHITE), LV_STATE_CHECKED);
+        lv_obj_set_style_border_color(btn, lv_color_hex(UI_COLOR_PRIMARY), LV_STATE_CHECKED);
     }
     
     return true;
 }
 
 bool UIManager::initializeComponents() {
-    // Initialize brightness slider
-    brightnessSlider_.reset(new BrightnessSlider(255)); // MAX_BRIGHTNESS
+    initStyles();
+
+    // ==========================================================================
+    // TAB 1: COLOUR - Fader style layout
+    // Layout: Left column (fader + VU) | Center (wheel) | Bottom (White + Effects)
+    // ==========================================================================
+    lv_obj_set_flex_flow(tab1_, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(tab1_, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_all(tab1_, UI_PADDING_MEDIUM, 0);
+    lv_obj_set_style_pad_row(tab1_, UI_SPACING_NORMAL, 0);
+    lv_obj_add_flag(tab1_, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
+
+    // --- Main content row: left column (fader+VU) + wheel ---
+    lv_obj_t* mainRow = lv_obj_create(tab1_);
+    lv_obj_set_size(mainRow, LV_PCT(100), LV_SIZE_CONTENT);
+    lv_obj_set_flex_grow(mainRow, 1);
+    lv_obj_set_flex_flow(mainRow, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(mainRow, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_bg_opa(mainRow, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(mainRow, 0, 0);
+    lv_obj_set_style_pad_all(mainRow, 0, 0);
+    lv_obj_set_style_pad_left(mainRow, UI_PADDING_LARGE, 0);  // Push fader right a bit
+    lv_obj_set_style_pad_column(mainRow, UI_SPACING_LOOSE, 0);
+    lv_obj_clear_flag(mainRow, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(mainRow, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
+
+    // --- Left column: Fader + VU button (stacked vertically) ---
+    lv_obj_t* leftColumn = lv_obj_create(mainRow);
+    lv_obj_set_size(leftColumn, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_flex_flow(leftColumn, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(leftColumn, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_bg_opa(leftColumn, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(leftColumn, 0, 0);
+    lv_obj_set_style_pad_all(leftColumn, 0, 0);
+    lv_obj_set_style_pad_row(leftColumn, UI_SPACING_NORMAL, 0);
+    lv_obj_clear_flag(leftColumn, LV_OBJ_FLAG_SCROLLABLE);
+
+    // Brightness fader (vertical)
+    brightnessSlider_.reset(new BrightnessSlider(255));
     if (brightnessSlider_) {
-        // Set callback BEFORE initialization to ensure proper state sync
         brightnessSlider_->setCallback([this](int newBrightness) {
             brightness = newBrightness;
             vu = false;
@@ -549,90 +656,106 @@ bool UIManager::initializeComponents() {
                 vuButton_->setState(false);
             }
             updateWebUi();
-            
-            // Update LED manager
+
             extern LEDManager* g_ledManager;
             if (g_ledManager) {
                 g_ledManager->setBrightness(newBrightness);
                 g_ledManager->setVuMode(false);
             }
         });
-        
-        // Initialize with current brightness value (should be 128 = middle of 255)
-        if (!brightnessSlider_->initialize(tab1_, 20, 10, brightness)) {
+
+        if (!brightnessSlider_->initialize(leftColumn, brightness)) {
             return false;
         }
     }
-    
-    // Initialize VU button
+
+    // VU button (directly under fader)
     vuButton_.reset(new VuButton());
-    if (vuButton_ && !vuButton_->initialize(tab1_)) {
+    if (vuButton_ && !vuButton_->initialize(leftColumn)) {
         return false;
     }
-    
-    // Set VU button callback
     if (vuButton_) {
         vuButton_->setCallback([this](bool newState) {
             vu = newState;
-            
-            // Update LED manager
+
             extern LEDManager* g_ledManager;
             if (g_ledManager) {
                 g_ledManager->setVuMode(newState);
             }
-            
+
             updateWebUi();
         });
     }
-    
-    // Initialize VU graph
-    vuGraph_.reset(new VuGraph());
-    if (vuGraph_ && !vuGraph_->initialize(tab3_)) {
-        return false;
-    }
-    
-    // Initialize colour wheel
+
+    // --- Center: Colour wheel (vertically centered with left column) ---
+    lv_obj_t* wheelContainer = lv_obj_create(mainRow);
+    lv_obj_set_flex_grow(wheelContainer, 1);
+    lv_obj_set_height(wheelContainer, LV_SIZE_CONTENT);
+    lv_obj_set_flex_flow(wheelContainer, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(wheelContainer, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_bg_opa(wheelContainer, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(wheelContainer, 0, 0);
+    lv_obj_set_style_pad_all(wheelContainer, 20, 0);  // Room for indicator
+    lv_obj_clear_flag(wheelContainer, LV_OBJ_FLAG_SCROLLABLE);
+
     colourWheel_.reset(new ColourWheel());
-    if (colourWheel_ && !colourWheel_->initialize(tab1_, 200, true)) {
+    if (colourWheel_ && !colourWheel_->initialize(wheelContainer, 180, true)) {
         return false;
     }
-    
-    // Set color wheel callback
     if (colourWheel_) {
         colourWheel_->setCallback([this](uint8_t r, uint8_t g, uint8_t b) {
             this->applyCurrentColor();
         });
     }
-    
-    // Initialize effects list
-    effectsList_.reset(new EffectsList());
-    if (effectsList_ && !effectsList_->initialize(tab2_)) {
+
+    // --- Bottom row: White + Effects buttons ---
+    lv_obj_t* bottomRow = lv_obj_create(tab1_);
+    lv_obj_set_size(bottomRow, LV_PCT(100), LV_SIZE_CONTENT);
+    lv_obj_set_flex_flow(bottomRow, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(bottomRow, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_bg_opa(bottomRow, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(bottomRow, 0, 0);
+    lv_obj_set_style_pad_all(bottomRow, 0, 0);
+    lv_obj_set_style_pad_column(bottomRow, UI_SPACING_NORMAL, 0);
+    lv_obj_clear_flag(bottomRow, LV_OBJ_FLAG_SCROLLABLE);
+
+    // White button
+    whiteButton_.reset(new WhiteButton());
+    if (whiteButton_ && !whiteButton_->initialize(bottomRow)) {
         return false;
     }
-    
-    // Set effects list callback
+
+    // Effects dropdown
+    effectsList_.reset(new EffectsList());
+    if (effectsList_ && !effectsList_->initialize(bottomRow)) {
+        return false;
+    }
     if (effectsList_) {
         effectsList_->setCallback([this](int effectIndex) {
             showAnimation = true;
             currentAnimation = static_cast<LEDManager::AnimationType>(effectIndex);
-            
-            // Update LED manager
+
             extern LEDManager* g_ledManager;
             if (g_ledManager) {
                 g_ledManager->setAnimationEnabled(true);
                 g_ledManager->setCurrentAnimation(static_cast<LEDManager::AnimationType>(effectIndex));
             }
-            
+
+            // Animation is now active
+            effectsList_->setActiveState(true);
+
             updateWebUi();
         });
     }
-    
-    // Initialize white button
-    whiteButton_.reset(new WhiteButton());
-    if (whiteButton_ && !whiteButton_->initialize(tab1_)) {
+
+    // ==========================================================================
+    // TAB 2: VU GRAPH
+    // ==========================================================================
+    vuGraph_.reset(new VuGraph());
+    if (vuGraph_ && !vuGraph_->initialize(tab2_)) {
         return false;
     }
-    
+
     return true;
 }
 
@@ -679,7 +802,6 @@ void UIManager::cleanup() {
 
     tab1_ = nullptr;
     tab2_ = nullptr;
-    tab3_ = nullptr;
     initialized_ = false;
 }
 

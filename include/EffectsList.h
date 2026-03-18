@@ -5,109 +5,53 @@
 #include <functional>
 
 /**
- * @brief Modern C++ class for managing an LVGL effects roller widget
- * 
- * This class provides a clean interface for creating and managing an effects
- * selection roller with proper resource management and callback support.
- * 
- * Features:
- * - RAII resource management
- * - Move semantics support
- * - Callback-based event handling
- * - Automatic cleanup on destruction
- * - Exception safety
- * 
- * @author Claude Code
+ * @brief Dropdown button for selecting LED effects
+ *
+ * Compact dropdown widget for effect selection.
+ * Layout handled by parent container.
  */
 class EffectsList {
 public:
     using EffectChangeCallback = std::function<void(int effectIndex)>;
 
-    /**
-     * @brief Default constructor
-     */
     EffectsList();
-
-    /**
-     * @brief Destructor - automatically cleans up LVGL objects
-     */
     ~EffectsList();
 
-    /**
-     * @brief Move constructor
-     */
     EffectsList(EffectsList&& other) noexcept;
-
-    /**
-     * @brief Move assignment operator
-     */
     EffectsList& operator=(EffectsList&& other) noexcept;
 
-    // Disable copy operations to prevent resource issues
     EffectsList(const EffectsList&) = delete;
     EffectsList& operator=(const EffectsList&) = delete;
 
     /**
-     * @brief Initialize the effects roller on the specified parent object
-     * @param parent The parent LVGL object (usually a tab)
-     * @param visibleRows Number of visible rows in the roller
-     * @return true if initialization was successful, false otherwise
+     * @brief Initialize the dropdown on the specified parent
+     * @param parent The parent LVGL object (layout handled by parent)
+     * @return true if initialization was successful
      */
-    bool initialize(lv_obj_t* parent, int visibleRows = 7);
+    bool initialize(lv_obj_t* parent);
 
-    /**
-     * @brief Set the effect change callback function
-     * @param callback Function to call when effect selection changes
-     */
     void setCallback(EffectChangeCallback callback);
-
-    /**
-     * @brief Set the currently selected effect
-     * @param effectIndex Index of the effect to select
-     * @param animate Whether to animate the selection change
-     */
     void setSelectedEffect(int effectIndex, bool animate = false);
-
-    /**
-     * @brief Get the currently selected effect index
-     * @return Index of the currently selected effect
-     */
     int getSelectedEffect() const;
 
     /**
-     * @brief Check if the effects list is initialized
-     * @return true if initialized, false otherwise
+     * @brief Set the active/inactive visual state
+     * @param active true when animations are running, false when color wheel is active
      */
-    bool isInitialized() const { return initialized_; }
+    void setActiveState(bool active);
 
-    /**
-     * @brief Get the underlying LVGL object (for advanced use)
-     * @return Pointer to the LVGL roller object, or nullptr if not initialized
-     */
-    lv_obj_t* getLvglObject() const { return roller_; }
+    bool isInitialized() const { return initialized_; }
+    lv_obj_t* getLvglObject() const { return dropdown_; }
 
 private:
-    lv_obj_t* roller_;
+    lv_obj_t* dropdown_;
     EffectChangeCallback callback_;
     bool initialized_;
+    bool activeState_;
 
-    /**
-     * @brief Static event handler for LVGL events
-     */
     static void eventHandler(lv_event_t* event);
-
-    /**
-     * @brief Internal effect change handler
-     */
+    static void openHandler(lv_event_t* event);
     void handleEffectChange();
-
-    /**
-     * @brief Clean up LVGL objects
-     */
     void cleanup();
-
-    /**
-     * @brief Build the options string for the roller
-     */
     String buildOptionsString();
 };

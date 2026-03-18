@@ -163,7 +163,33 @@ public:
      */
     void hideOTAScreen();
 
+    /**
+     * @brief Create a styled panel container (hardware module look)
+     * @param parent Parent object
+     * @return Styled panel object
+     */
+    static lv_obj_t* createPanel(lv_obj_t* parent);
+
+    /**
+     * @brief Create a section label (e.g., "BRIGHTNESS", "COLOUR")
+     * @param parent Parent object
+     * @param text Label text
+     * @return Label object
+     */
+    static lv_obj_t* createSectionLabel(lv_obj_t* parent, const char* text);
+
 private:
+    // Shared styles (initialized once)
+    static lv_style_t stylePanelMain_;
+    static lv_style_t stylePanelInset_;
+    static lv_style_t styleSectionLabel_;
+    static bool stylesInitialized_;
+
+    /**
+     * @brief Initialize shared styles (called once)
+     */
+    static void initStyles();
+
     // UI component instances using smart pointers
     std::unique_ptr<BrightnessSlider> brightnessSlider_;
     std::unique_ptr<ColourWheel> colourWheel_;
@@ -175,8 +201,7 @@ private:
     // LVGL objects
     lv_obj_t* tabview_;
     lv_obj_t* tab1_;  // Colour tab
-    lv_obj_t* tab2_;  // Effects tab
-    lv_obj_t* tab3_;  // VU tab
+    lv_obj_t* tab2_;  // VU tab
 
     // OTA screen objects
     lv_obj_t* otaScreen_;

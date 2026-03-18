@@ -58,9 +58,9 @@ bool ColourWheel::initialize(lv_obj_t* parent,
     colorWheel_ = lv_colorwheel_create(parent, knobRecolor);
     if (!colorWheel_) return false;
 
-    // Size & position
+    // Size only - no positioning (parent layout handles it)
     lv_obj_set_size(colorWheel_, size, size);
-    lv_obj_center(colorWheel_);
+
 
     // Optional styling tweaks
     lv_obj_clear_flag(colorWheel_, LV_OBJ_FLAG_SCROLLABLE);
