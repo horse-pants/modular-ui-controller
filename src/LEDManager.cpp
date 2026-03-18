@@ -13,19 +13,17 @@ LEDManager::AnimationType currentAnimation = LEDManager::RAINBOW;
 int vuValue[7] = {0, 0, 0, 0, 0, 0, 0};
 int audioLevel = 0;
 
-// Static animation descriptions
+// Static animation descriptions (🎵 = audio reactive)
 const char* LEDManager::animationDescriptions_[] = {
     "Rainbow",
-    "Cylon", 
+    "Cylon",
     "RGB Chaser",
     "Beat Sine",
-    "Ice Waves",
-    "Purple Rain",
-    "Fire",
-    "Matrix",
-    "VU",
-    "Beat Drop",
-    "Sound Ripple"
+    "Ice Waves (A)",
+    "Purple Rain (A)",
+    "Fire (A)",
+    "Matrix (A)",
+    "VU (A)"
 };
 
 LEDManager::LEDManager()
@@ -392,8 +390,6 @@ int LEDManager::getAnimationInterval() const {
         case FIRE: return 20;
         case MATRIX: return 50;
         case VU: return 5;
-        case BEATDROP: return 10;
-        case SOUNDRIPPLE: return 15;
         default: return 100;
     }
 }
@@ -409,8 +405,6 @@ void LEDManager::runAnimation() {
         case FIRE: animationFire(); break;
         case MATRIX: animationMatrix(); break;
         case VU: animationVu(); break;
-        case BEATDROP: animationBeatDrop(); break;
-        case SOUNDRIPPLE: animationSoundRipple(); break;
         default: break;
     }
 }
@@ -573,162 +567,6 @@ void LEDManager::animationVu() {
     fadeAll(20);
     for (int strip = 0; strip < numStrips_; strip++) {
         fillFromCentre(strip, getVuForStrip(strip), CRGB::Green, CRGB::Orange, CRGB::Red);
-    }
-}
-
-void LEDManager::animationBeatDrop() {
-    static uint8_t beatThreshold = 200;
-    static uint8_t beatDecay = 10;
-    static uint8_t flashBrightness = 0;
-    static unsigned long lastBeat = 0;
-    
-    // Check for strong bass hits across lower frequency bands
-    int bassLevel = 0;
-    
-    // Average the lower frequency bands for bass detection
-    for (int i = 0; i < min(3, 7); i++) {
-        bassLevel += vuLevels_[i];
-    }
-    bassLevel = bassLevel / min(3, 7);
-    
-    // Detect beat drop (sudden bass spike)
-    if (bassLevel > beatThreshold && millis() - lastBeat > 100) {
-        flashBrightness = 255;
-        lastBeat = millis();
-    }
-    
-    // Fade the flash
-    if (flashBrightness > 0) {
-        // Fill all strips with white flash, considering alternating directions
-        for (int strip = 0; strip < numStrips_; strip++) {
-            for (int led = 0; led < ledsPerStrip_; led++) {
-                int ledIndex;
-                if (strip % 2 == 0) {
-                    // Even strips: normal direction
-                    ledIndex = strip * ledsPerStrip_ + led;
-                } else {
-                    // Odd strips: reverse direction for alternating effect
-                    ledIndex = strip * ledsPerStrip_ + (ledsPerStrip_ - 1 - led);
-                }
-                
-                if (ledIndex < totalLeds_) {
-                    leds_[ledIndex] = CRGB(flashBrightness, flashBrightness, flashBrightness);
-                }
-            }
-        }
-        
-        flashBrightness = max(0, (int)flashBrightness - beatDecay);
-    } else {
-        // Subtle background based on overall audio level
-        fadeAll(30);
-        
-        // Add subtle colored ripples for continuous audio
-        for (int strip = 0; strip < numStrips_; strip++) {
-            int vuLevel = getVuForStrip(strip);
-            if (vuLevel > 50) {
-                int centre = getCentreOfStrip(strip);
-                uint8_t intensity = map(vuLevel, 50, 255, 0, 150);
-                
-                // Use different colors for different frequency ranges
-                CRGB color;
-                if (strip < numStrips_ / 3) {
-                    color = CRGB(intensity, 0, intensity / 2); // Purple for bass
-                } else if (strip < 2 * numStrips_ / 3) {
-                    color = CRGB(0, intensity, intensity / 2); // Cyan for mids
-                } else {
-                    color = CRGB(intensity / 2, intensity, 0); // Yellow for highs
-                }
-                
-                leds_[centre] = color;
-            }
-        }
-    }
-}
-
-void LEDManager::animationSoundRipple() {
-    static uint8_t ripplePositions[10] = {0}; // Track up to 10 ripples
-    static uint8_t rippleBrightness[10] = {0};
-    static CRGB rippleColors[10];
-    static unsigned long lastRipple = 0;
-    static uint8_t rippleIndex = 0;
-    
-    // Fade existing LEDs
-    fadeAll(25);
-    
-    // Check for audio peaks to trigger new ripples
-    for (int strip = 0; strip < numStrips_; strip++) {
-        int vuLevel = getVuForStrip(strip);
-        
-        // Trigger ripple on significant audio peak
-        if (vuLevel > 120 && millis() - lastRipple > 50) {
-            ripplePositions[rippleIndex] = 0; // Start from center
-            rippleBrightness[rippleIndex] = 255;
-            
-            // Color based on frequency range and intensity
-            uint8_t hue = map(strip, 0, numStrips_ - 1, 0, 255); // Rainbow across strips
-            uint8_t sat = 255;
-            uint8_t val = map(vuLevel, 120, 255, 150, 255);
-            rippleColors[rippleIndex] = CHSV(hue, sat, val);
-            
-            rippleIndex = (rippleIndex + 1) % 10;
-            lastRipple = millis();
-        }
-    }
-    
-    // Update and draw ripples
-    for (int r = 0; r < 10; r++) {
-        if (rippleBrightness[r] > 0) {
-            // Draw ripple on each strip
-            for (int strip = 0; strip < numStrips_; strip++) {
-                int centre = getCentreOfStrip(strip);
-                int maxRippleSize = ledsPerStrip_ / 2;
-                
-                // Draw the ripple wave
-                if (ripplePositions[r] <= maxRippleSize) {
-                    // Current ripple position
-                    int pos = ripplePositions[r];
-                    
-                    // Calculate brightness with distance falloff
-                    uint8_t brightness = rippleBrightness[r];
-                    if (pos > 0) {
-                        brightness = brightness * (maxRippleSize - pos + 1) / maxRippleSize;
-                    }
-                    
-                    // Set LEDs for this ripple position, considering alternating directions
-                    if (pos == 0) {
-                        // Center LED
-                        leds_[centre] += rippleColors[r].scale8(brightness);
-                    } else {
-                        // Ripple outward from center
-                        int led1 = centre + pos;
-                        int led2 = centre - pos;
-                        
-                        // Handle alternating strip directions
-                        if (strip % 2 == 1) {
-                            // Odd strips are reversed - swap the positions
-                            led1 = centre - pos;
-                            led2 = centre + pos;
-                        }
-                        
-                        if (led1 >= strip * ledsPerStrip_ && led1 < (strip + 1) * ledsPerStrip_) {
-                            leds_[led1] += rippleColors[r].scale8(brightness);
-                        }
-                        if (led2 >= strip * ledsPerStrip_ && led2 < (strip + 1) * ledsPerStrip_) {
-                            leds_[led2] += rippleColors[r].scale8(brightness);
-                        }
-                    }
-                }
-            }
-            
-            // Update ripple for next frame
-            ripplePositions[r]++;
-            rippleBrightness[r] = max(0, (int)rippleBrightness[r] - 8);
-            
-            // Remove ripple if it's too dim or too far
-            if (rippleBrightness[r] < 10 || ripplePositions[r] > ledsPerStrip_ / 2 + 5) {
-                rippleBrightness[r] = 0;
-            }
-        }
     }
 }
 

@@ -181,7 +181,7 @@ void EffectsList::cleanup() {
 String EffectsList::buildOptionsString() {
     String options;
     
-    for (int i = LEDManager::RAINBOW; i <= LEDManager::SOUNDRIPPLE; i++) {
+    for (int i = LEDManager::RAINBOW; i <= LEDManager::VU; i++) {
         options.concat(LEDManager::getAnimationDescription(static_cast<LEDManager::AnimationType>(i)));
         options.concat("\n");
     }

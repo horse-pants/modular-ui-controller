@@ -22,9 +22,7 @@ public:
         PURPLERAIN,
         FIRE,
         MATRIX,
-        VU,
-        BEATDROP,
-        SOUNDRIPPLE
+        VU
     };
     
     /**
@@ -237,8 +235,6 @@ private:
     void animationFire();
     void animationMatrix();
     void animationVu();
-    void animationBeatDrop();
-    void animationSoundRipple();
     
     // Helper methods
     int getCentreOfStrip(int strip) const;

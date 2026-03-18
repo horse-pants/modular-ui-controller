@@ -514,19 +514,25 @@ bool UIManager::createTabview() {
     lv_obj_set_style_bg_color(tab2_, lv_color_hex(UI_COLOR_SURFACE), 0);
     lv_obj_set_style_bg_color(tab3_, lv_color_hex(UI_COLOR_SURFACE), 0);
     
-    // Style tab buttons properly using LV_PART_ITEMS for individual buttons
-    lv_obj_t* tab_btns = lv_tabview_get_tab_btns(tabview_);
-    lv_obj_set_style_bg_color(tab_btns, lv_color_hex(UI_COLOR_SURFACE), LV_PART_ITEMS);
-    lv_obj_set_style_bg_color(tab_btns, lv_color_hex(UI_COLOR_PRIMARY), LV_PART_ITEMS | LV_STATE_CHECKED);
-    lv_obj_set_style_text_color(tab_btns, lv_color_hex(UI_COLOR_TEXT), LV_PART_ITEMS);
-    lv_obj_set_style_text_color(tab_btns, lv_color_hex(UI_COLOR_WHITE), LV_PART_ITEMS | LV_STATE_CHECKED);
-    lv_obj_set_style_border_color(tab_btns, lv_color_hex(UI_COLOR_PRIMARY), 0);
-    lv_obj_set_style_border_width(tab_btns, 2, 0);
-    
-    // Remove the bottom indicator line that shows in blue
-    lv_obj_set_style_border_side(tab_btns, LV_BORDER_SIDE_NONE, LV_PART_ITEMS | LV_STATE_CHECKED);
-    lv_obj_set_style_outline_width(tab_btns, 0, LV_PART_ITEMS | LV_STATE_CHECKED);
-    lv_obj_set_style_shadow_width(tab_btns, 0, LV_PART_ITEMS | LV_STATE_CHECKED);
+    // Style tab bar container (LVGL 9 uses buttons, not btnmatrix)
+    lv_obj_t* tab_bar = lv_tabview_get_tab_bar(tabview_);
+    lv_obj_set_style_bg_color(tab_bar, lv_color_hex(UI_COLOR_SURFACE), 0);
+    lv_obj_set_style_border_color(tab_bar, lv_color_hex(UI_COLOR_PRIMARY), 0);
+    lv_obj_set_style_border_width(tab_bar, 2, 0);
+
+    // Style each tab button child
+    uint32_t child_count = lv_obj_get_child_count(tab_bar);
+    for (uint32_t i = 0; i < child_count; i++) {
+        lv_obj_t* btn = lv_obj_get_child(tab_bar, i);
+        // Inactive state - white text on dark surface
+        lv_obj_set_style_bg_color(btn, lv_color_hex(UI_COLOR_SURFACE), 0);
+        lv_obj_set_style_text_color(btn, lv_color_hex(0xFFFFFF), 0);
+        lv_obj_set_style_border_width(btn, 0, 0);
+        lv_obj_set_style_shadow_width(btn, 0, 0);
+        // Active/checked state - white text on cyan
+        lv_obj_set_style_bg_color(btn, lv_color_hex(UI_COLOR_PRIMARY), LV_STATE_CHECKED);
+        lv_obj_set_style_text_color(btn, lv_color_hex(UI_COLOR_WHITE), LV_STATE_CHECKED);
+    }
     
     return true;
 }

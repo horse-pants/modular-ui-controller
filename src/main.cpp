@@ -7,6 +7,7 @@
 #include <WiFiSetupBootUI.h>
 #include <OTAManager.h>
 #include <Logger.h>
+#include <Preferences.h>
 #include "LEDManager.h"
 #include "WebUIManager.h"
 #include <memory>
@@ -117,6 +118,16 @@ void setup(void)
 
     // Start WiFi setup
     if (g_wifiManager) {
+      // Pre-load device name from Preferences before begin() so it's available for callbacks
+      if (g_bootUI) {
+        Preferences prefs;
+        prefs.begin("wifi", true);  // Read-only
+        String hostname = prefs.getString("host_name", "");
+        prefs.end();
+        if (hostname.length() > 0) {
+          g_bootUI->setDeviceName(hostname);
+        }
+      }
       g_wifiManager->begin();
       Logger.info("Logger web interface available at /logs");
     }

@@ -10,7 +10,12 @@
       "Bash(test:*)",
       "Bash(md5sum:*)",
       "Bash(D:/PlatformIO/.platformio/python3/python.exe:*)",
-      "Bash(pio run:*)"
+      "Glob(path:D:/PlatformIO/Projects/ESP32WifiSetup/*)",
+      "Read(file_path:D:/PlatformIO/Projects/ESP32WifiSetup/*)",
+      "Search(path:D:/PlatformIO/Projects/ESP32WifiSetup/*)",
+      "Read(//d/PlatformIO/Projects/ESP32WifiSetup/**)",
+      "Glob(//d/PlatformIO/Projects/ESP32WifiSetup/**)",
+      "Grep(path://d/PlatformIO/Projects/ESP32WifiSetup/**)"
     ],
     "deny": [],
     "ask": []

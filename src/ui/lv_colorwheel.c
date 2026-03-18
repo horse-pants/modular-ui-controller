@@ -262,23 +262,16 @@ static void draw_disc_grad(lv_obj_t * obj, lv_layer_t * layer)
 
 static void draw_knob(lv_obj_t * obj, lv_layer_t * layer)
 {
-    lv_colorwheel_t * colorwheel = (lv_colorwheel_t *)obj;
-
     lv_draw_rect_dsc_t cir_dsc;
     lv_draw_rect_dsc_init(&cir_dsc);
     lv_obj_init_draw_rect_dsc(obj, LV_PART_KNOB, &cir_dsc);
 
     cir_dsc.radius = LV_RADIUS_CIRCLE;
 
-    // Ensure knob is visible
+    // Filled circle with the selected color, no border
     cir_dsc.bg_opa     = LV_OPA_COVER;
-    cir_dsc.border_opa = LV_OPA_COVER;
-    cir_dsc.border_width = 2;
-    cir_dsc.border_color = lv_color_hex(0xFFFFFF);
-
-    if(colorwheel->knob.recolor) {
-        cir_dsc.bg_color = lv_colorwheel_get_rgb(obj);
-    }
+    cir_dsc.bg_color   = lv_colorwheel_get_rgb(obj);
+    cir_dsc.border_opa = LV_OPA_TRANSP;
 
     lv_area_t knob_area = get_knob_area(obj);
     lv_draw_rect(layer, &cir_dsc, &knob_area);
@@ -295,8 +288,8 @@ static lv_area_t get_knob_area(lv_obj_t * obj)
 {
     lv_colorwheel_t * colorwheel = (lv_colorwheel_t *)obj;
 
-    /* Get knob's radius */
-    uint16_t r = lv_obj_get_style_arc_width(obj, LV_PART_MAIN)/2;
+    /* Get knob's radius - 20% larger than arc width to extend past the ring */
+    uint16_t r = lv_obj_get_style_arc_width(obj, LV_PART_MAIN) * 0.8;
 
     lv_coord_t left   = lv_obj_get_style_pad_left(obj,   LV_PART_KNOB);
     lv_coord_t right  = lv_obj_get_style_pad_right(obj,  LV_PART_KNOB);
@@ -333,7 +326,11 @@ static void lv_colorwheel_event(const lv_obj_class_t * class_p, lv_event_t * e)
         lv_coord_t top    = lv_obj_get_style_pad_top(obj,    LV_PART_KNOB);
         lv_coord_t bottom = lv_obj_get_style_pad_bottom(obj, LV_PART_KNOB);
 
-        lv_coord_t knob_pad = LV_MAX4(left, right, top, bottom) + 2;
+        /* Account for knob extending past the arc (radius is arc_width * 0.8, not arc_width / 2) */
+        lv_coord_t arc_w = lv_obj_get_style_arc_width(obj, LV_PART_MAIN);
+        lv_coord_t knob_extend = (arc_w * 3) / 10;  /* Extra extension: 0.8 - 0.5 = 0.3 */
+
+        lv_coord_t knob_pad = LV_MAX4(left, right, top, bottom) + knob_extend + 2;
         lv_coord_t * s = lv_event_get_param(e);
         *s = LV_MAX(*s, knob_pad);
     }
