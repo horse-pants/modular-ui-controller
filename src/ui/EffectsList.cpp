@@ -220,7 +220,7 @@ void EffectsList::cleanup() {
 String EffectsList::buildOptionsString() {
     String options;
 
-    for (int i = LEDManager::RAINBOW; i <= LEDManager::VU; i++) {
+    for (int i = LEDManager::RAINBOW; i <= LEDManager::CONFETTI; i++) {
         if (i > LEDManager::RAINBOW) {
             options.concat("\n");
         }

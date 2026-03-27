@@ -12,17 +12,25 @@
  */
 class LEDManager {
 public:
-    // Animation types
+    // Animation types - non-audio first, then audio-reactive
     enum AnimationType {
+        // Non-audio reactive
         RAINBOW = 0,
         CYLON,
         RGBCHASER,
         BEATSINE,
+        PLASMA,
+        SPARKLE,
+        WAVE,
+        COMET,
+        // Audio reactive
         ICEWAVES,
         PURPLERAIN,
         FIRE,
         MATRIX,
-        VU
+        VU,
+        RIPPLE,
+        CONFETTI
     };
     
     /**
@@ -235,6 +243,12 @@ private:
     void animationFire();
     void animationMatrix();
     void animationVu();
+    void animationPlasma();
+    void animationSparkle();
+    void animationWave();
+    void animationRipple();
+    void animationComet();
+    void animationConfetti();
     
     // Helper methods
     int getCentreOfStrip(int strip) const;
@@ -243,6 +257,7 @@ private:
     void moveDown();
     int getRandomLed(int divisions, int division) const;
     CRGB pickColour(int led, int vuValue, CRGB colour1, CRGB colour2, CRGB colour3) const;
+    int xyToIndex(int x, int y) const;  // Convert 2D coord to snake-wired linear index
     
     // Static animation descriptions
     static const char* animationDescriptions_[];

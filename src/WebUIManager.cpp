@@ -373,7 +373,7 @@ String WebUIManager::generateAnimationsResponse() {
     doc["message"] = "animations";
     JsonArray animations = doc["animations"].to<JsonArray>();
 
-    for (int i = LEDManager::RAINBOW; i <= LEDManager::VU; i++) {
+    for (int i = LEDManager::RAINBOW; i <= LEDManager::CONFETTI; i++) {
         LEDManager::AnimationType current = static_cast<LEDManager::AnimationType>(i);
         JsonObject anim = animations.add<JsonObject>();
         anim["name"] = LEDManager::getAnimationDescription(current);

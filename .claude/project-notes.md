@@ -99,51 +99,38 @@ loop():
 
 ---
 
-## 🎛️ Current Work: UI Redesign (Synth/Audio Gear Aesthetic)
+## LVGL UI Design Notes
 
-**Goal**: Transform primitive LVGL UI into professional-looking synth/audio hardware style
+### Style Constants
+**ALL colors and styles in `include/modular-ui.h`** - use `UI_COLOR_*` and `UI_*` constants.
 
-### ⚠️ Maintainability Rule
-**ALL colors and styles defined in `include/modular-ui.h`**.
-No hardcoded hex values in component files - always use `UI_COLOR_*` and `UI_*` constants.
+### Colour Tab Layout
+- Left column: vertical brightness fader + VU button (stacked)
+- Center: colour wheel (with 20px container padding for indicator)
+- Bottom row: White button + Effects dropdown
 
-### Design Principles
-- Dark backgrounds with neon accents (cyan primary)
-- Hardware-like panels with distinct modules
-- LED-style indicators and illuminated buttons
-- Segmented VU meter (green→yellow→red)
-- Glow effects on active elements
+### Component Behaviors
+- **Effects dropdown**: Lights up cyan when animation is active, dims when color/white active
+- **Buttons**: Thick bright border when active (shadows/glow don't work on this hardware)
+- **Color wheel indicator**: Custom `lv_colorwheel.c` with larger filled circle indicator
 
-### Phase 1: Structure & Layout ✅
-- [x] Centralized colors + layout constants in `modular-ui.h`
-- [x] Reusable panel styles in `UIManager` (static styles)
-- [x] Components don't position themselves (parent layout controls)
-- [x] Consistent spacing via `UI_PADDING_*` / `UI_SPACING_*` constants
+### Key Gotchas
+- Container padding needed for color wheel indicator (not overflow flags)
+- Dropdown list styling must be done in open handler (list doesn't exist until opened)
+- Use `lv_obj_set_scroll_dir(list, LV_DIR_VER)` for vertical-only scroll on dropdown
 
-### Phase 1.5: Fader-Style Layout ✅
-- [x] Removed Effects tab (reduced to 2 tabs: Colour, VU)
-- [x] Made BrightnessSlider vertical (24px wide, 200px tall)
-- [x] Converted EffectsList from roller to dropdown (drop-up direction)
-- [x] Restructured Colour tab layout:
-  - Left side: vertical fader
-  - Right side: colour wheel (flex-grow fills space)
-  - Bottom row: VU + White + Effects dropdown
+---
 
-### Phase 2: Component Styling ✅
-- [x] Buttons: Illuminated hardware style with glow when active (VU=cyan, White=white glow)
-- [x] Slider: Metallic knob, recessed track, glowing cyan indicator
-- [x] Tab bar: Hardware selector style with glow on active tab
-- [x] Effects dropdown: Hardware look with glowing popup list
-- [x] Added `UI_BTN_COMPACT_WIDTH` (56px) for narrow buttons
+## 🎛️ Remaining UI Work
 
-### Phase 3: VU Meter Overhaul ⬜
-- [ ] Segmented bar design (individual LED rectangles)
-- [ ] Color gradient: green → yellow → red
-- [ ] Peak hold indicator
+### Phase 3: VU Meter Overhaul ✅
+- [x] Segmented bar design (16 individual LED rectangles per channel)
+- [x] Color gradient: green → yellow → red
+- [x] Peak hold indicator with decay
 
 ### Phase 4: Polish ⬜
-- [ ] Glow/shadow effects
 - [ ] Smooth animations
-- [ ] Test on hardware
+- [ ] Final testing on hardware
+- [ ] Update Web UI to match
 
 ---

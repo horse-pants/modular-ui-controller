@@ -99,6 +99,15 @@ function toggleControl(element) {
         "message": element.id,
         "value": !isActive
     }));
+
+    // If turning on White, reset animation dropdown (VU works with animations)
+    if (!isActive && element.id === 'white') {
+        const animSelect = document.getElementById('animation');
+        if (animSelect) {
+            animSelect.value = "-1";
+            animSelect.classList.remove("active");
+        }
+    }
 }
 
 function changeBrightness(element) {
@@ -114,7 +123,7 @@ let colorPickerOpen = false;
 function initColorPicker() {
     const colorDisplay = document.getElementById('colour');
     const colorGradient = document.getElementById('colorGradient');
-    const presetColors = document.querySelectorAll('.preset-color');
+    const presets = document.querySelectorAll('.preset');
     const hexInput = document.getElementById('hexInput');
     
     colorDisplay.style.backgroundColor = currentColor;
@@ -166,7 +175,7 @@ function initColorPicker() {
         setColor(color);
     });
     
-    presetColors.forEach(preset => {
+    presets.forEach(preset => {
         preset.addEventListener('click', function() {
             setColor(this.dataset.color);
         });
@@ -188,23 +197,17 @@ function initColorPicker() {
 
 function toggleColorPicker() {
     const picker = document.getElementById('colorPicker');
-    const colorControl = document.querySelector('.color-picker-container').closest('.control');
-    
     if (colorPickerOpen) {
         hideColorPicker();
     } else {
         picker.style.display = 'block';
-        colorControl.classList.add('color-picker-active');
         colorPickerOpen = true;
     }
 }
 
 function hideColorPicker() {
     const picker = document.getElementById('colorPicker');
-    const colorControl = document.querySelector('.color-picker-container').closest('.control');
-    
     picker.style.display = 'none';
-    colorControl.classList.remove('color-picker-active');
     colorPickerOpen = false;
 }
 
@@ -223,6 +226,13 @@ function setColor(color) {
         "message": "colour",
         "value": color
     }));
+
+    // Reset animation dropdown so same animation can be re-selected
+    const animSelect = document.getElementById('animation');
+    if (animSelect) {
+        animSelect.value = "-1";
+        animSelect.classList.remove("active");
+    }
 }
 
 function interpolateColor(color1, color2, factor) {

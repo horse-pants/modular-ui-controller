@@ -15,7 +15,8 @@
       "Search(path:D:/PlatformIO/Projects/ESP32WifiSetup/*)",
       "Read(//d/PlatformIO/Projects/ESP32WifiSetup/**)",
       "Glob(//d/PlatformIO/Projects/ESP32WifiSetup/**)",
-      "Grep(path://d/PlatformIO/Projects/ESP32WifiSetup/**)"
+      "Grep(path://d/PlatformIO/Projects/ESP32WifiSetup/**)",
+      "Bash(python:*)"
     ],
     "deny": [],
     "ask": []

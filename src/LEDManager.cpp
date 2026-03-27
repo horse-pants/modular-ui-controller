@@ -13,17 +13,25 @@ LEDManager::AnimationType currentAnimation = LEDManager::RAINBOW;
 int vuValue[7] = {0, 0, 0, 0, 0, 0, 0};
 int audioLevel = 0;
 
-// Static animation descriptions (🎵 = audio reactive)
+// Static animation descriptions ((A) = audio reactive)
 const char* LEDManager::animationDescriptions_[] = {
+    // Non-audio reactive
     "Rainbow",
     "Cylon",
     "RGB Chaser",
     "Beat Sine",
+    "Plasma",
+    "Sparkle",
+    "Wave",
+    "Comet",
+    // Audio reactive
     "Ice Waves (A)",
     "Purple Rain (A)",
     "Fire (A)",
     "Matrix (A)",
-    "VU (A)"
+    "VU (A)",
+    "Ripple (A)",
+    "Confetti (A)"
 };
 
 LEDManager::LEDManager()
@@ -381,30 +389,46 @@ void LEDManager::updateBrightness() {
 
 int LEDManager::getAnimationInterval() const {
     switch (currentAnimation_) {
-        case CYLON: return 30;
+        // Non-audio reactive
         case RAINBOW: return 10;
+        case CYLON: return 30;
         case RGBCHASER: return 30;
         case BEATSINE: return 50;
+        case PLASMA: return 20;
+        case SPARKLE: return 30;
+        case WAVE: return 25;
+        case COMET: return 20;
+        // Audio reactive
         case ICEWAVES: return 20;
         case PURPLERAIN: return 20;
         case FIRE: return 20;
         case MATRIX: return 50;
         case VU: return 5;
+        case RIPPLE: return 15;
+        case CONFETTI: return 10;
         default: return 100;
     }
 }
 
 void LEDManager::runAnimation() {
     switch (currentAnimation_) {
+        // Non-audio reactive
         case RAINBOW: animationRainbow(); break;
         case CYLON: animationCylon(); break;
         case RGBCHASER: animationRgbChaser(); break;
         case BEATSINE: animationBeatSine(); break;
+        case PLASMA: animationPlasma(); break;
+        case SPARKLE: animationSparkle(); break;
+        case WAVE: animationWave(); break;
+        case COMET: animationComet(); break;
+        // Audio reactive
         case ICEWAVES: animationIceWaves(); break;
         case PURPLERAIN: animationPurpleRain(); break;
         case FIRE: animationFire(); break;
         case MATRIX: animationMatrix(); break;
         case VU: animationVu(); break;
+        case RIPPLE: animationRipple(); break;
+        case CONFETTI: animationConfetti(); break;
         default: break;
     }
 }
@@ -623,6 +647,243 @@ CRGB LEDManager::pickColour(int led, int vuValue, CRGB colour1, CRGB colour2, CR
     } else {
         return colour3;
     }
+}
+
+int LEDManager::xyToIndex(int x, int y) const {
+    // Convert 2D coordinates to linear index accounting for snake wiring
+    // y = row (strip), x = column position within strip
+    // Even rows (0, 2, 4...) are wired right-to-left (reversed)
+    // Odd rows (1, 3, 5...) are wired left-to-right (normal)
+    if (x < 0 || x >= ledsPerStrip_ || y < 0 || y >= numStrips_) {
+        return -1;  // Out of bounds
+    }
+
+    int index;
+    if (y % 2 == 0) {
+        // Even row - reversed (right to left)
+        index = (y * ledsPerStrip_) + (ledsPerStrip_ - 1 - x);
+    } else {
+        // Odd row - normal (left to right)
+        index = (y * ledsPerStrip_) + x;
+    }
+    return index;
+}
+
+// New animation: Plasma - colorful swirling sine wave patterns
+void LEDManager::animationPlasma() {
+    static uint16_t time = 0;
+    time += 1;
+
+    for (int y = 0; y < numStrips_; y++) {
+        for (int x = 0; x < ledsPerStrip_; x++) {
+            // Create plasma effect using multiple sine waves
+            uint8_t v1 = sin8(x * 10 + time);
+            uint8_t v2 = sin8(y * 15 + time * 2);
+            uint8_t v3 = sin8((x + y) * 8 + time);
+            uint8_t v4 = sin8(sqrt16((x * x + y * y) * 64) + time * 3);
+
+            uint8_t hue = (v1 + v2 + v3 + v4) / 4;
+            uint8_t brightness = 200 + sin8(time + x * 5) / 5;
+
+            int idx = xyToIndex(x, y);
+            if (idx >= 0) {
+                leds_[idx] = CHSV(hue, 255, brightness);
+            }
+        }
+    }
+}
+
+// New animation: Sparkle - twinkling stars effect
+void LEDManager::animationSparkle() {
+    static uint8_t sparkleHue = 0;
+
+    // Fade existing LEDs
+    fadeAll(25);
+
+    // Add random sparkles
+    int numSparkles = max(1, totalLeds_ / 25);  // Scale sparkles with total LEDs
+    for (int i = 0; i < numSparkles; i++) {
+        if (random8() < 90) {  // ~35% chance per sparkle slot
+            int idx = random16(totalLeds_);
+            // Mostly colored sparkles, occasional white accent
+            if (random8() < 30) {  // ~12% white
+                leds_[idx] = CRGB::White;
+            } else {
+                // Wide hue range for variety
+                leds_[idx] = CHSV(sparkleHue + random8(160), 220, 255);
+            }
+        }
+    }
+    sparkleHue += 3;  // Faster hue rotation for more color variety
+}
+
+// New animation: Wave - horizontal color waves traveling across rows
+void LEDManager::animationWave() {
+    static uint16_t offset = 0;
+    offset += 3;
+
+    for (int y = 0; y < numStrips_; y++) {
+        // Each row has a phase offset for wave effect
+        uint16_t rowPhase = offset + (y * 40);
+
+        for (int x = 0; x < ledsPerStrip_; x++) {
+            // Create wave using sine
+            uint8_t wave = sin8(x * 8 + rowPhase);
+
+            // Map wave to hue with row-based offset
+            uint8_t hue = wave + (y * 30);
+            uint8_t brightness = 150 + (wave / 3);
+
+            int idx = xyToIndex(x, y);
+            if (idx >= 0) {
+                leds_[idx] = CHSV(hue, 255, brightness);
+            }
+        }
+    }
+}
+
+// New animation: Ripple - audio-reactive ripples emanating from random points
+void LEDManager::animationRipple() {
+    static uint8_t rippleAge[8] = {0};    // Age of up to 8 ripples
+    static int8_t rippleX[8] = {0};        // Ripple center X
+    static int8_t rippleY[8] = {0};        // Ripple center Y
+    static uint8_t rippleHue[8] = {0};     // Ripple color
+    static uint8_t nextRipple = 0;
+    static uint8_t baseHue = 0;
+    static uint8_t spawnCooldown = 0;
+
+    // Slower fade to keep ripples visible longer
+    fadeAll(12);
+
+    // Ambient background glow that pulses with audio
+    uint8_t ambientBright = 15 + (audioLevel_ / 10);
+    for (int i = 0; i < totalLeds_; i++) {
+        leds_[i] += CHSV(baseHue + 128, 255, ambientBright);
+    }
+    baseHue++;
+
+    // Decrease cooldown
+    if (spawnCooldown > 0) spawnCooldown--;
+
+    // Spawn new ripple on audio - lower threshold and faster spawning
+    if (audioLevel_ > 60 && spawnCooldown == 0) {
+        // Spawn rate scales with audio intensity
+        int spawnChance = map(audioLevel_, 60, 255, 30, 200);
+        if (random8() < spawnChance) {
+            rippleX[nextRipple] = random8(ledsPerStrip_);
+            rippleY[nextRipple] = random8(numStrips_);
+            rippleHue[nextRipple] = baseHue + random8(64);
+            rippleAge[nextRipple] = 1;
+            nextRipple = (nextRipple + 1) % 8;
+            spawnCooldown = 3;  // Brief cooldown between spawns
+        }
+    }
+
+    // Draw and age all active ripples
+    for (int r = 0; r < 8; r++) {
+        if (rippleAge[r] > 0 && rippleAge[r] < 60) {  // Longer lifespan
+            int radius = rippleAge[r];
+            uint8_t brightness = 255 - (rippleAge[r] * 4);  // Slower fade
+
+            // Draw ripple ring with thicker edge
+            for (int y = 0; y < numStrips_; y++) {
+                for (int x = 0; x < ledsPerStrip_; x++) {
+                    int dx = x - rippleX[r];
+                    int dy = (y - rippleY[r]) * 3;  // Scale Y since rows are fewer
+                    int dist = sqrt16(dx * dx + dy * dy);
+
+                    // Wider ring (radius -2 to +2)
+                    if (dist >= radius - 2 && dist <= radius + 2) {
+                        int idx = xyToIndex(x, y);
+                        if (idx >= 0) {
+                            uint8_t fade = 255 - abs(dist - radius) * 50;
+                            leds_[idx] += CHSV(rippleHue[r], 255, scale8(brightness, fade));
+                        }
+                    }
+                }
+            }
+            rippleAge[r]++;
+        }
+    }
+}
+
+// New animation: Comet - shooting comets with trails
+void LEDManager::animationComet() {
+    static int16_t cometPos[3] = {0, 0, 0};          // Position along path
+    static int8_t cometRow[3] = {0, 2, 4};           // Which row each comet is on
+    static int8_t cometDir[3] = {1, -1, 1};          // Direction: 1 = right, -1 = left
+    static uint8_t cometHue[3] = {0, 85, 170};       // Color for each comet
+
+    fadeAll(40);
+
+    for (int c = 0; c < min(3, numStrips_); c++) {
+        // Ensure comet row is valid
+        if (cometRow[c] >= numStrips_) {
+            cometRow[c] = c % numStrips_;
+        }
+
+        // Draw comet head and tail
+        for (int t = 0; t < 12; t++) {
+            int x = cometPos[c] - (t * cometDir[c]);
+            if (x >= 0 && x < ledsPerStrip_) {
+                int idx = xyToIndex(x, cometRow[c]);
+                if (idx >= 0) {
+                    uint8_t brightness = 255 - (t * 20);
+                    leds_[idx] += CHSV(cometHue[c], 200, brightness);
+                }
+            }
+        }
+
+        // Move comet
+        cometPos[c] += cometDir[c] * 2;
+
+        // Bounce or wrap to next row
+        if (cometPos[c] >= ledsPerStrip_ + 10) {
+            cometPos[c] = ledsPerStrip_ - 1;
+            cometDir[c] = -1;
+            cometRow[c] = (cometRow[c] + 1) % numStrips_;
+            cometHue[c] += 30;
+        } else if (cometPos[c] < -10) {
+            cometPos[c] = 0;
+            cometDir[c] = 1;
+            cometRow[c] = (cometRow[c] + 1) % numStrips_;
+            cometHue[c] += 30;
+        }
+    }
+}
+
+// New animation: Confetti - audio-reactive colored dots with slow fade
+void LEDManager::animationConfetti() {
+    static uint8_t confettiHue = 0;
+
+    // Very gentle fade so dots linger and fade out smoothly
+    fadeAll(3);
+
+    // Gentler scaling of dots with audio level
+    int numDots = 0;
+    if (audioLevel_ > 50) {
+        // Chance-based spawning scaled by audio
+        int spawnChance = map(audioLevel_, 50, 255, 30, 120);
+        if (random8() < spawnChance) {
+            numDots = 1;
+            // Only occasionally spawn 2 on loud hits
+            if (audioLevel_ > 180 && random8() < 50) {
+                numDots = 2;
+            }
+        }
+    }
+
+    // Brightness scales with audio
+    uint8_t dotBright = map(audioLevel_, 0, 255, 180, 255);
+
+    for (int i = 0; i < numDots; i++) {
+        int pos = random16(totalLeds_);
+        // Saturated colors, white only on very loud hits
+        uint8_t sat = (audioLevel_ > 220 && random8() < 25) ? 0 : 255;
+        leds_[pos] = CHSV(confettiHue + random8(96), sat, dotBright);
+    }
+
+    confettiHue += 1;
 }
 
 // Legacy wrapper functions for backward compatibility

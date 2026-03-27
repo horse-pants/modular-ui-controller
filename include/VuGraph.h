@@ -6,9 +6,13 @@
 #include <Filter.h>
 
 #define NUM_VU_CHANNELS 7
-#define BAR_WIDTH 35
-#define BAR_HEIGHT 280
+#define SEGMENTS_PER_BAR 10
+#define SEGMENT_WIDTH 26
+#define SEGMENT_HEIGHT 18
+#define SEGMENT_GAP 2
 #define BAR_SPACING 10
+#define LEFT_ALIGNMENT 260
+#define BAR_TOTAL_HEIGHT ((SEGMENT_HEIGHT + SEGMENT_GAP) * SEGMENTS_PER_BAR)
 
 /**
  * @brief Modern C++ class for managing an LVGL VU meter graph widget
@@ -106,9 +110,10 @@ public:
 
 private:
     lv_obj_t* canvas_;
-    lv_obj_t* vuBars_[NUM_VU_CHANNELS];
+    lv_obj_t* segments_[NUM_VU_CHANNELS][SEGMENTS_PER_BAR];
+    lv_obj_t* peakSegments_[NUM_VU_CHANNELS];  // Peak hold indicators
     bool initialized_;
-    
+
     // Audio processing components
     ExponentialFilter<int> filters_[NUM_VU_CHANNELS];
     ExponentialFilter<int> audioFilter_;
@@ -116,8 +121,15 @@ private:
     int vuValues_[NUM_VU_CHANNELS];
     int audioLevel_;
 
+    // Peak hold tracking
+    int peakLevels_[NUM_VU_CHANNELS];
+    unsigned long peakTimers_[NUM_VU_CHANNELS];
+
+    // Previous state for change detection
+    int prevLitSegments_[NUM_VU_CHANNELS];
+
     /**
-     * @brief Update individual VU bars with current levels
+     * @brief Update individual VU segments with current levels
      */
     void updateVuBars();
 
@@ -135,4 +147,12 @@ private:
      * @brief Create frequency labels for the bars
      */
     void createFrequencyLabels();
+
+    /**
+     * @brief Get color for a segment based on its position
+     * @param segmentIndex Segment index (0 = bottom, SEGMENTS_PER_BAR-1 = top)
+     * @param lit Whether the segment is lit or dim
+     * @return Color for the segment
+     */
+    lv_color_t getSegmentColor(int segmentIndex, bool lit);
 };

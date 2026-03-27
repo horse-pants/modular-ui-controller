@@ -1,91 +1,76 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Modular UI</title>
+    <title>LED Controller</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="stylesheet" href="style.css">
     <script src="theme.js"></script>
     <script src="script.js"></script>
 </head>
 <body>
-    <header>
-        <div class="header-controls">
-            <h1>Modular UI</h1>
-            <button type="button" class="theme-toggle" onclick="toggleTheme()">
-                <i class="fas fa-sun"></i>
-            </button>
-        </div>
-    </header>
-    
     <main>
-        <section class="control-group">
-            <div class="control">
-                <h3>Colour</h3>
-                <p>Set all LEDs to specified colour, this will stop any animation.</p>
-                <div class="color-picker-container">
-                    <div class="color-display" id="colour" onclick="toggleColorPicker()"></div>
-                    <div class="color-picker" id="colorPicker" style="display: none;">
-                        <div class="color-gradient" id="colorGradient"></div>
-                        <div class="color-presets">
-                            <div class="preset-color" data-color="#ff0000" style="background: #ff0000;"></div>
-                            <div class="preset-color" data-color="#00ff00" style="background: #00ff00;"></div>
-                            <div class="preset-color" data-color="#0000ff" style="background: #0000ff;"></div>
-                            <div class="preset-color" data-color="#ffff00" style="background: #ffff00;"></div>
-                            <div class="preset-color" data-color="#ff00ff" style="background: #ff00ff;"></div>
-                            <div class="preset-color" data-color="#00ffff" style="background: #00ffff;"></div>
-                            <div class="preset-color" data-color="#ffffff" style="background: #ffffff;"></div>
-                            <div class="preset-color" data-color="#ff8000" style="background: #ff8000;"></div>
-                            <div class="preset-color" data-color="#8000ff" style="background: #8000ff;"></div>
-                            <div class="preset-color" data-color="#ff0080" style="background: #ff0080;"></div>
-                            <div class="preset-color" data-color="#00ff88" style="background: #00ff88;"></div>
-                            <div class="preset-color" data-color="#000000" style="background: #000000;"></div>
+        <div class="header">
+            <h1>LED Controller</h1>
+            <button type="button" class="theme-toggle" onclick="toggleTheme()"></button>
+        </div>
+
+        <div class="card">
+            <div class="row">
+                <div class="control-item">
+                    <label>Colour</label>
+                    <div class="color-picker-container">
+                        <div class="color-display" id="colour" onclick="toggleColorPicker()"></div>
+                        <div class="color-picker" id="colorPicker" style="display: none;">
+                            <div class="color-gradient" id="colorGradient"></div>
+                            <div class="color-presets">
+                                <div class="preset" data-color="#ff0000" style="background:#ff0000"></div>
+                                <div class="preset" data-color="#ff8000" style="background:#ff8000"></div>
+                                <div class="preset" data-color="#ffff00" style="background:#ffff00"></div>
+                                <div class="preset" data-color="#00ff00" style="background:#00ff00"></div>
+                                <div class="preset" data-color="#00ffff" style="background:#00ffff"></div>
+                                <div class="preset" data-color="#0080ff" style="background:#0080ff"></div>
+                                <div class="preset" data-color="#0000ff" style="background:#0000ff"></div>
+                                <div class="preset" data-color="#8000ff" style="background:#8000ff"></div>
+                                <div class="preset" data-color="#ff00ff" style="background:#ff00ff"></div>
+                                <div class="preset" data-color="#ff0080" style="background:#ff0080"></div>
+                                <div class="preset" data-color="#ffffff" style="background:#ffffff"></div>
+                                <div class="preset" data-color="#000000" style="background:#000000"></div>
+                            </div>
+                            <input type="text" id="hexInput" placeholder="#ff0000" maxlength="7">
                         </div>
-                        <input type="text" id="hexInput" placeholder="#ff0000" maxlength="7" class="hex-input">
                     </div>
                 </div>
-            </div>
-            
-            <div class="control">
-                <h3>White Light</h3>
-                <p>Set all LEDs to white, this will stop any animation.</p>
-                <button type="button" id="white" onclick="toggleControl(this)">White</button>
-            </div>
-        </section>
-        
-        <section class="control-group">
-            <div class="control">
-                <h3>Volume Metre</h3>
-                <p>Set brightness to follow volume.</p>
-                <button type="button" id="vu" onclick="toggleControl(this)">VU</button>
-            </div>
-            
-            <div class="control">
-                <h3>Animations</h3>
-                <p>Pick from a list of animations, select nothing from the list to cancel animations.</p>
-                <select id="animation" onchange="animationChange(this)">
-                    <option value="-1">Select Animation</option>
-                </select>
-            </div>
-        </section>
-        
-        <section class="control-group">
-            <div class="control">
-                <h3>Brightness</h3>
-                <p>Set brightness of the LEDs, this will turn off the volume metre.</p>
-                <input type="range" min="0" max="255" id="brightness" onchange="changeBrightness(this)">
-            </div>
-            
-            <div class="control">
-                <h3>Settings</h3>
-                <p>Device configuration and maintenance options.</p>
-                <div class="button-group">
-                    <a href="/update" class="button">Update</a>
-                    <a href="/setup" class="button">WiFi</a>
-                    <a href="/led-config" class="button">LEDs</a>
-                    <a href="/logs" class="button">Logs</a>
+
+                <div class="control-item">
+                    <label>White</label>
+                    <button type="button" id="white" onclick="toggleControl(this)">On</button>
+                </div>
+
+                <div class="control-item">
+                    <label>VU</label>
+                    <button type="button" id="vu" onclick="toggleControl(this)">On</button>
                 </div>
             </div>
-        </section>
+
+            <div class="control-item full">
+                <label>Animation</label>
+                <select id="animation" onchange="animationChange(this)">
+                    <option value="-1">None</option>
+                </select>
+            </div>
+
+            <div class="control-item full">
+                <label>Brightness</label>
+                <input type="range" min="0" max="255" id="brightness" onchange="changeBrightness(this)">
+            </div>
+        </div>
+
+        <nav>
+            <a href="/update">Update</a>
+            <a href="/setup">WiFi</a>
+            <a href="/led-config">LEDs</a>
+            <a href="/logs">Logs</a>
+        </nav>
     </main>
 </body>
 </html>
