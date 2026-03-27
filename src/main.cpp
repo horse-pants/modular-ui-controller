@@ -170,6 +170,11 @@ void setup(void)
   // Perform startup fade-in after all initialization is complete (only if not in setup mode)
   if (g_ledManager && g_wifiManager && !g_wifiManager->isInSetupMode()) {
     g_ledManager->performStartupFadeIn();
+
+    // Sync UI components with loaded LED state
+    if (g_uiManager) {
+      g_uiManager->syncWithLEDState();
+    }
   }
 }
 

@@ -52,8 +52,12 @@ public:
 
     /**
      * @brief Set the color from RGB components
+     * @param r Red component
+     * @param g Green component
+     * @param b Blue component
+     * @param applyToLeds If true, also updates LEDs (default). If false, only updates UI.
      */
-    void setColor(uint8_t r, uint8_t g, uint8_t b);
+    void setColor(uint8_t r, uint8_t g, uint8_t b, bool applyToLeds = true);
 
     /**
      * @brief Get the current color as a hex string

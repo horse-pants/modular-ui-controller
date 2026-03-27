@@ -46,6 +46,10 @@ LEDManager::LEDManager()
     , vuMode_(false)
     , whiteMode_(false)
     , currentAnimation_(RAINBOW)
+    , solidColor_(CRGB::Red)
+    , stateDirty_(false)
+    , stateLoaded_(false)
+    , stateChangedTime_(0)
     , audioLevel_(0)
     , lastOTAProgress_(255)  // Invalid value to force first update
     , lastAnimationUpdate_(0)
@@ -65,34 +69,37 @@ bool LEDManager::initialize() {
     if (initialized_) {
         return true;
     }
-    
+
     loadConfiguration();
-    
+
     if (!isConfigValid()) {
         Serial.println("Warning: No valid LED configuration found. LED functions disabled.");
         Serial.println("Please configure LED settings through the setup page.");
         return false;
     }
-    
+
     if (!allocateLedArrays()) {
         Serial.println("Error: Failed to allocate memory for LEDs");
         return false;
     }
-    
+
     // Initialize FastLED
     FastLED.addLeds<WS2812B, DATA_PIN, GRB>(leds_, totalLeds_);
     FastLED.clear();
     FastLED.setBrightness(0);
-    
+
+    // Load saved LED state (brightness, mode, color, animation, etc.)
+    loadState();
+
     // Sync legacy global variables
     brightness = brightness_;
     showAnimation = showAnimation_;
     vu = vuMode_;
     white = whiteMode_;
     currentAnimation = currentAnimation_;
-    
+
     initialized_ = true;
-    Serial.printf("LED Manager initialized: %d strips, %d LEDs/strip, %d total\n", 
+    Serial.printf("LED Manager initialized: %d strips, %d LEDs/strip, %d total\n",
                  numStrips_, ledsPerStrip_, totalLeds_);
     return true;
 }
@@ -101,20 +108,23 @@ void LEDManager::update() {
     if (!initialized_ || !isConfigValid() || !leds_) {
         return;
     }
-    
+
     updateBrightness();
-    
+
     unsigned long currentTime = millis();
     if (currentTime - lastAnimationUpdate_ >= (unsigned long)getAnimationInterval()) {
         lastAnimationUpdate_ = currentTime;
-        
+
         if (showAnimation_) {
             runAnimation();
         }
     }
-    
+
     FastLED.show();
-    
+
+    // Check if state needs saving (debounced)
+    saveStateIfNeeded();
+
     // Keep legacy variables in sync
     brightness = brightness_;
     showAnimation = showAnimation_;
@@ -123,9 +133,10 @@ void LEDManager::update() {
     currentAnimation = currentAnimation_;
 }
 
-void LEDManager::setBrightness(uint8_t brightness) {
-    brightness_ = brightness;
+void LEDManager::setBrightness(uint8_t newBrightness) {
+    brightness_ = newBrightness;
     brightness = brightness_; // Sync legacy global
+    markStateDirty();
 }
 
 void LEDManager::performStartupFadeIn() {
@@ -133,22 +144,50 @@ void LEDManager::performStartupFadeIn() {
         return;
     }
 
-    // Startup sequence - fade in red from black
-    // Ensure we have a minimum brightness for the fade-in
+    // Use saved brightness, minimum 1 for visibility during fade
     uint8_t targetBrightness = brightness_;
-    if (targetBrightness < 64) {
-        targetBrightness = 128; // Default to 128 if somehow set too low
+    if (targetBrightness < 1) {
+        targetBrightness = 1;
     }
 
-    fillColor(CRGB::Red);
-    for (int i = 0; i <= targetBrightness; i++) {
-        FastLED.setBrightness(i);
-        FastLED.show();
-        delay(25);
+    // Calculate delay to make fade take roughly the same time regardless of brightness
+    // Lower brightness = longer delay per step to maintain visible fade
+    int delayPerStep = max(5, 2000 / max((int)targetBrightness, 1));
+
+    // Determine what to show based on saved state
+    if (showAnimation_) {
+        // For animations: start animation immediately but fade in brightness
+        FastLED.setBrightness(0);
+        for (int i = 0; i <= targetBrightness; i++) {
+            runAnimation();
+            FastLED.setBrightness(i);
+            FastLED.show();
+            delay(delayPerStep);
+        }
+    } else if (whiteMode_) {
+        // Fade in white
+        fillColor(CRGB::White);
+        for (int i = 0; i <= targetBrightness; i++) {
+            FastLED.setBrightness(i);
+            FastLED.show();
+            delay(delayPerStep);
+        }
+    } else {
+        // Fade in solid color (default to red if no color saved)
+        CRGB startupColor = solidColor_;
+        if (startupColor.r == 0 && startupColor.g == 0 && startupColor.b == 0) {
+            startupColor = CRGB::Red;  // Default to red for first boot
+        }
+        fillColor(startupColor);
+        for (int i = 0; i <= targetBrightness; i++) {
+            FastLED.setBrightness(i);
+            FastLED.show();
+            delay(delayPerStep);
+        }
     }
 
-    // Keep red color visible after fade-in
-    fillColor(CRGB::Red);
+    // Ensure final brightness is exactly what was saved
+    FastLED.setBrightness(brightness_);
     FastLED.show();
 }
 
@@ -350,16 +389,121 @@ void LEDManager::loadConfiguration() {
     if (configLoaded_) {
         return;
     }
-    
+
     preferences_.begin("led-config", true); // Read-only mode
     numStrips_ = preferences_.getInt("num_strips", 0);
     ledsPerStrip_ = preferences_.getInt("leds_per_strip", 0);
     totalLeds_ = numStrips_ * ledsPerStrip_;
     preferences_.end();
     configLoaded_ = true;
-    
-    Serial.printf("Loaded LED config: %d strips, %d LEDs/strip, %d total\n", 
+
+    Serial.printf("Loaded LED config: %d strips, %d LEDs/strip, %d total\n",
                  numStrips_, ledsPerStrip_, totalLeds_);
+}
+
+void LEDManager::loadState() {
+    Preferences statePrefs;
+    statePrefs.begin("led-state", true); // Read-only
+
+    // Check if we have saved state
+    if (!statePrefs.isKey("brightness")) {
+        Serial.println("No saved LED state found, using defaults (red fade-in)");
+        stateLoaded_ = false;
+        statePrefs.end();
+        return;
+    }
+
+    brightness_ = statePrefs.getUChar("brightness", 128);
+    showAnimation_ = statePrefs.getBool("animation", false);
+    whiteMode_ = statePrefs.getBool("white", false);
+    vuMode_ = statePrefs.getBool("vu", false);
+    currentAnimation_ = static_cast<AnimationType>(statePrefs.getUChar("anim_idx", 0));
+
+    // Load solid color as packed RGB
+    uint32_t packedColor = statePrefs.getUInt("color", 0xFF0000); // Default red
+    solidColor_.r = (packedColor >> 16) & 0xFF;
+    solidColor_.g = (packedColor >> 8) & 0xFF;
+    solidColor_.b = packedColor & 0xFF;
+
+    statePrefs.end();
+    stateLoaded_ = true;
+
+    Serial.printf("Loaded LED state: bright=%d, anim=%d, white=%d, vu=%d, animIdx=%d, color=#%02X%02X%02X\n",
+                 brightness_, showAnimation_, whiteMode_, vuMode_, currentAnimation_,
+                 solidColor_.r, solidColor_.g, solidColor_.b);
+}
+
+void LEDManager::clearSavedState() {
+    Preferences statePrefs;
+    statePrefs.begin("led-state", false);
+    statePrefs.clear();
+    statePrefs.end();
+    stateLoaded_ = false;
+    Serial.println("LED state preferences cleared");
+}
+
+void LEDManager::saveState() {
+    Preferences statePrefs;
+    statePrefs.begin("led-state", false); // Read-write
+
+    statePrefs.putUChar("brightness", brightness_);
+    statePrefs.putBool("animation", showAnimation_);
+    statePrefs.putBool("white", whiteMode_);
+    statePrefs.putBool("vu", vuMode_);
+    statePrefs.putUChar("anim_idx", static_cast<uint8_t>(currentAnimation_));
+
+    // Pack color as RGB
+    uint32_t packedColor = ((uint32_t)solidColor_.r << 16) | ((uint32_t)solidColor_.g << 8) | solidColor_.b;
+    statePrefs.putUInt("color", packedColor);
+
+    statePrefs.end();
+
+    Serial.println("LED state saved to preferences");
+}
+
+void LEDManager::saveStateIfNeeded() {
+    if (!stateDirty_) {
+        return;
+    }
+
+    // Check if enough time has passed since last change (debounce)
+    if (millis() - stateChangedTime_ >= STATE_SAVE_DEBOUNCE_MS) {
+        saveState();
+        stateDirty_ = false;
+    }
+}
+
+void LEDManager::markStateDirty() {
+    stateDirty_ = true;
+    stateChangedTime_ = millis();
+}
+
+void LEDManager::setAnimationEnabled(bool enabled) {
+    showAnimation_ = enabled;
+    markStateDirty();
+}
+
+void LEDManager::setCurrentAnimation(AnimationType animation) {
+    currentAnimation_ = animation;
+    markStateDirty();
+}
+
+void LEDManager::setVuMode(bool enabled) {
+    vuMode_ = enabled;
+    markStateDirty();
+}
+
+void LEDManager::setWhiteMode(bool enabled) {
+    whiteMode_ = enabled;
+    markStateDirty();
+}
+
+void LEDManager::setSolidColor(CRGB color) {
+    solidColor_ = color;
+    showAnimation_ = false;
+    whiteMode_ = false;
+    fillColor(color);
+    markStateDirty();
 }
 
 bool LEDManager::allocateLedArrays() {

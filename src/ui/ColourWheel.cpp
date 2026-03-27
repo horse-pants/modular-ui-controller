@@ -2,6 +2,7 @@
 #include "modular-ui.h"
 #include "ui.h"
 #include "WhiteButton.h"
+#include "LEDManager.h"
 
 // External stuff you already use
 extern bool showAnimation;
@@ -10,6 +11,7 @@ extern bool white;
 extern void updateWebUi();
 extern CRGB leds[];
 extern CFastLED FastLED;
+extern LEDManager* g_ledManager;
 
 ColourWheel::ColourWheel()
     : colorWheel_(nullptr)
@@ -93,14 +95,16 @@ void ColourWheel::setColor(const String& hexString) {
     setColor(r, g, b);
 }
 
-void ColourWheel::setColor(uint8_t r, uint8_t g, uint8_t b) {
+void ColourWheel::setColor(uint8_t r, uint8_t g, uint8_t b, bool applyToLeds) {
     if (!initialized_ || !colorWheel_) return;
 
     lv_color_t col = lv_color_make(r, g, b);
     lv_colorwheel_set_rgb(colorWheel_, col);
 
-    // Immediately apply side-effects
-    handleColorChange();
+    // Optionally apply side-effects (update LEDs)
+    if (applyToLeds) {
+        handleColorChange();
+    }
 }
 
 String ColourWheel::getColorHex() const {
@@ -164,10 +168,10 @@ void ColourWheel::handleColorChange() {
     uint8_t r, g, b;
     getColorRGB(r, g, b);
 
-    // Update LED strip
-    showAnimation = false;
-    FastLED.clear();
-    colorFill(CRGB(r, g, b));
+    // Update LED strip via LEDManager (handles state persistence)
+    if (g_ledManager) {
+        g_ledManager->setSolidColor(CRGB(r, g, b));
+    }
 
     // Clear white button state (prevent recursion)
     if (g_whiteButton && g_whiteButton->isInitialized()) {

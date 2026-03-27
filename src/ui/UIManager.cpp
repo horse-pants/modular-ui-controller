@@ -535,6 +535,60 @@ void UIManager::setAnimation(int animation) {
     }
 }
 
+void UIManager::syncWithLEDState() {
+    extern LEDManager* g_ledManager;
+    if (!g_ledManager) return;
+
+    Logger.info("Syncing UI with LED state...");
+
+    // Sync brightness slider
+    if (brightnessSlider_) {
+        brightnessSlider_->setBrightness(g_ledManager->getBrightness(), false, false);
+    }
+
+    // Sync VU button
+    if (vuButton_) {
+        vuButton_->setState(g_ledManager->isVuModeEnabled());
+    }
+    vu = g_ledManager->isVuModeEnabled();
+
+    // Sync white button
+    if (whiteButton_) {
+        whiteButton_->setState(g_ledManager->isWhiteModeEnabled(), false);
+    }
+    white = g_ledManager->isWhiteModeEnabled();
+
+    // Sync animation/effects dropdown
+    if (g_ledManager->isAnimationEnabled()) {
+        showAnimation = true;
+        currentAnimation = static_cast<animationOptions>(g_ledManager->getCurrentAnimation());
+        if (effectsList_) {
+            effectsList_->setSelectedEffect(static_cast<int>(g_ledManager->getCurrentAnimation()), false);
+            effectsList_->setActiveState(true);
+        }
+    } else {
+        showAnimation = false;
+        if (effectsList_) {
+            effectsList_->setActiveState(false);
+        }
+    }
+
+    // Sync color wheel display with saved solid color (don't apply to LEDs, just update UI)
+    if (colourWheel_) {
+        CRGB color = g_ledManager->getSolidColor();
+        colourWheel_->setColor(color.r, color.g, color.b, false);  // false = UI only, no LED update
+    }
+
+    // Notify web UI of current state
+    updateWebUi();
+
+    Logger.info("UI sync complete: bright=%d, vu=%d, white=%d, anim=%d",
+                g_ledManager->getBrightness(),
+                g_ledManager->isVuModeEnabled(),
+                g_ledManager->isWhiteModeEnabled(),
+                g_ledManager->isAnimationEnabled());
+}
+
 void UIManager::applySynthTheme() {
     // Apply dark synth theme to screen background
     lv_obj_set_style_bg_color(lv_scr_act(), lv_color_hex(UI_COLOR_BACKGROUND), 0);

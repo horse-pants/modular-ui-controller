@@ -83,7 +83,6 @@ private:
     // API response generators
     String generateAnimationsResponse();
     String generateStateResponse();
-    String getCurrentSettingsResponse();
     
     // WebSocket message handlers
     void handleConnectMessage();
@@ -92,14 +91,7 @@ private:
     void handleBrightnessMessage(const JsonDocument& request);
     void handleAnimationMessage(const JsonDocument& request);
     void handleColorMessage(const JsonDocument& request);
-    
-    // Route handlers
-    void handleWiFiSave(AsyncWebServerRequest* request);
-    void handleFactoryReset(AsyncWebServerRequest* request);
-    void handleGetCurrentSettings(AsyncWebServerRequest* request);
-    void handleGetNetworks(AsyncWebServerRequest* request);
-    void handleScanNetworks(AsyncWebServerRequest* request);
-    
+
     // Static WebSocket event handler (needed for C-style callback)
     static void staticWebSocketEventHandler(AsyncWebSocket* server, AsyncWebSocketClient* client,
                                           AwsEventType type, void* arg, uint8_t* data, size_t len);

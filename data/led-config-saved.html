@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>LED Config Saved</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="style.css">
+    <script src="theme.js"></script>
+    <style>
+        .success-icon {
+            font-size: 3rem;
+            color: var(--accent);
+            margin-bottom: 1rem;
+        }
+        .status {
+            color: var(--text-dim);
+            font-size: 0.9rem;
+            margin-top: 1.5rem;
+        }
+    </style>
+</head>
+<body>
+    <main>
+        <div class="header">
+            <h1>Configuration Saved</h1>
+            <button type="button" class="theme-toggle" onclick="toggleTheme()"></button>
+        </div>
+        <div class="container" style="text-align: center;">
+            <div class="success-icon">&#10003;</div>
+            <p>Your LED configuration has been saved.</p>
+            <p class="status">Restarting device...</p>
+        </div>
+    </main>
+    <script>
+        setTimeout(function() { window.location.href = '/'; }, 5000);
+    </script>
+</body>
+</html>

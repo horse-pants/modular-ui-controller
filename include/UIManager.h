@@ -112,6 +112,12 @@ public:
     void setAnimation(int animation);
 
     /**
+     * @brief Sync UI state with LEDManager's loaded state
+     * Call this after UI is initialized to reflect saved LED state
+     */
+    void syncWithLEDState();
+
+    /**
      * @brief Check if the UI manager is initialized
      * @return true if initialized, false otherwise
      */

@@ -339,14 +339,7 @@ void WebUIManager::setupAPIEndpoints() {
 
             Logger.info("Saved LED config: %d strips, %d LEDs per strip", numStrips, ledsPerStrip);
 
-            String html = "<h1>LED Configuration Saved!</h1>";
-            html += "<p>Strips: " + String(numStrips) + "</p>";
-            html += "<p>LEDs per strip: " + String(ledsPerStrip) + "</p>";
-            html += "<p>Total LEDs: " + String(numStrips * ledsPerStrip) + "</p>";
-            html += "<p>Restarting...</p>";
-            html += "<script>setTimeout(function(){ window.location.href='/'; }, 3000);</script>";
-
-            request->send(200, "text/html", html);
+            request->send(LittleFS, "/led-config-saved.html", "text/html");
 
             // Schedule restart
             extern bool g_restartRequested;
@@ -354,6 +347,17 @@ void WebUIManager::setupAPIEndpoints() {
         } else {
             request->send(400, "text/plain", "Invalid LED configuration");
         }
+    });
+
+    // Clear saved LED state (for testing first-boot experience)
+    server_->on("/clear-led-state", HTTP_POST, [](AsyncWebServerRequest* request) {
+        extern LEDManager* g_ledManager;
+        if (g_ledManager) {
+            g_ledManager->clearSavedState();
+        }
+
+        Logger.info("LED state preferences cleared via web UI");
+        request->send(LittleFS, "/led-state-cleared.html", "text/html");
     });
 
     // Legacy get-message endpoint (mostly unused)
@@ -510,191 +514,6 @@ void WebUIManager::handleColorMessage(const JsonDocument& request) {
         Logger.debug("Hex value: %s", hexValue.c_str());
         g_colourWheel->setColor(hexValue);
     }
-}
-
-void WebUIManager::handleGetNetworks(AsyncWebServerRequest* request) {
-    String networks = "";
-    if (g_wifiManager) {
-        networks = g_wifiManager->getScannedNetworks();
-    }
-    request->send(200, "text/plain", networks);
-}
-
-void WebUIManager::handleScanNetworks(AsyncWebServerRequest* request) {
-    String networks = "";
-    if (g_wifiManager) {
-        networks = g_wifiManager->getScannedNetworks();
-    }
-    request->send(200, "text/plain", networks);
-}
-
-void WebUIManager::handleWiFiSave(AsyncWebServerRequest* request) {
-    String networkName = "";
-    String wifiNetwork = "";
-    String wifiPassword = "";
-    int numStrips = 0;
-    int ledsPerStrip = 0;
-    
-    if (request->hasParam("network_name", true)) {
-        networkName = request->getParam("network_name", true)->value();
-    }
-    if (request->hasParam("wifi_network", true)) {
-        wifiNetwork = request->getParam("wifi_network", true)->value();
-    }
-    if (request->hasParam("wifi_password", true)) {
-        wifiPassword = request->getParam("wifi_password", true)->value();
-    }
-    if (request->hasParam("num_strips", true)) {
-        numStrips = request->getParam("num_strips", true)->value().toInt();
-    }
-    if (request->hasParam("leds_per_strip", true)) {
-        ledsPerStrip = request->getParam("leds_per_strip", true)->value().toInt();
-    }
-    
-    // Load current WiFi settings to check for changes
-    Preferences prefs;
-    prefs.begin("wifi", true); // Read-only first
-    String currentNetworkName = prefs.getString("host_name", "");
-    String currentWifiSSID = prefs.getString("ssid", "");
-    prefs.end();
-    
-    // Check if WiFi settings have changed
-    bool wifiChanged = (networkName != currentNetworkName) || 
-                       (wifiNetwork != currentWifiSSID) || 
-                       (wifiPassword.length() > 0); // Password provided means user wants to update it
-    
-    // Only update WiFi preferences if something changed
-    if (wifiChanged) {
-        prefs.begin("wifi", false); // Write mode
-        prefs.putString("host_name", networkName);
-        prefs.putString("ssid", wifiNetwork);
-        
-        // Only update password if one was provided
-        if (wifiPassword.length() > 0) {
-            prefs.putString("password", wifiPassword);
-        }
-
-        prefs.end();
-        Logger.info("Updated WiFi settings: Host=%s, SSID=%s", networkName.c_str(), wifiNetwork.c_str());
-    } else {
-        Logger.debug("WiFi settings unchanged - skipping WiFi update");
-    }
-
-    // Save LED configuration preferences
-    if (numStrips > 0 && ledsPerStrip > 0) {
-        Preferences ledPrefs;
-        ledPrefs.begin("led-config", false);
-        ledPrefs.putInt("num_strips", numStrips);
-        ledPrefs.putInt("leds_per_strip", ledsPerStrip);
-        ledPrefs.end();
-        Logger.info("Saved LED config: %d strips, %d LEDs per strip", numStrips, ledsPerStrip);
-    }
-    
-    // Read the HTML template and replace placeholders
-    String html = "";
-    try {
-        if (LittleFS.exists("/wifi-saved.html")) {
-            File file = LittleFS.open("/wifi-saved.html", "r");
-            if (file) {
-                html = file.readString();
-                file.close();
-                // Replace placeholders
-                html.replace("%NETWORK_NAME%", networkName);
-                html.replace("%WIFI_NETWORK%", wifiNetwork);
-            }
-        }
-    } catch (...) {
-        // Handle any exceptions during file reading
-        html = "";
-    }
-    
-    if (html.length() == 0) {
-        // Fallback if file doesn't exist - show what was actually changed
-        html = "<h1>Configuration Saved!</h1>";
-        if (wifiChanged) {
-            html += "<p>WiFi Updated - Host: " + networkName + " | SSID: " + wifiNetwork + "</p>";
-        } else {
-            html += "<p>WiFi settings unchanged</p>";
-        }
-        if (numStrips > 0 && ledsPerStrip > 0) {
-            html += "<p>LED Config: " + String(numStrips) + " strips, " + String(ledsPerStrip) + " LEDs per strip</p>";
-        }
-        html += "<p>Restarting...</p>";
-    }
-    
-    request->send(200, "text/html", html);
-    
-    // Schedule restart - don't block the async web server thread
-    extern bool g_restartRequested;
-    g_restartRequested = true;
-}
-
-void WebUIManager::handleGetCurrentSettings(AsyncWebServerRequest* request) {
-    Preferences prefs;
-    prefs.begin("wifi", true); // Read-only mode
-    
-    bool hasSettings = prefs.isKey("host_name");
-    String networkName = prefs.getString("host_name", "");
-    String wifiSSID = prefs.getString("ssid", "");
-    
-    prefs.end();
-    
-    // Get LED configuration
-    Preferences ledPrefs;
-    ledPrefs.begin("led-config", true); // Read-only mode
-    
-    bool hasLedSettings = ledPrefs.isKey("num_strips");
-    int numStrips = ledPrefs.getInt("num_strips", 0);
-    int ledsPerStrip = ledPrefs.getInt("leds_per_strip", 0);
-    int totalLeds = numStrips * ledsPerStrip;
-    
-    ledPrefs.end();
-    
-    String json = "{";
-    json += "\"hasSettings\":" + String(hasSettings ? "true" : "false") + ",";
-    json += "\"networkName\":\"" + networkName + "\",";
-    json += "\"wifiSSID\":\"" + wifiSSID + "\",";
-    json += "\"hasLedSettings\":" + String(hasLedSettings ? "true" : "false") + ",";
-    json += "\"numStrips\":" + String(numStrips) + ",";
-    json += "\"ledsPerStrip\":" + String(ledsPerStrip) + ",";
-    json += "\"totalLeds\":" + String(totalLeds);
-    json += "}";
-    
-    request->send(200, "application/json", json);
-}
-
-void WebUIManager::handleFactoryReset(AsyncWebServerRequest* request) {
-    // Clear all preferences
-    Preferences prefs;
-    prefs.begin("wifi", false);
-    prefs.clear(); // Clear all preferences in the "wifi" namespace
-    prefs.end();
-    
-    // Also clear LED config preferences
-    prefs.begin("led-config", false);
-    prefs.clear();
-    prefs.end();
-    
-    // Read the HTML template
-    String html = "";
-    if (LittleFS.exists("/factory-reset.html")) {
-        File file = LittleFS.open("/factory-reset.html", "r");
-        if (file) {
-            html = file.readString();
-            file.close();
-        }
-    }
-    
-    if (html.length() == 0) {
-        // Fallback if file doesn't exist
-        html = "<h1>Factory Reset Complete!</h1><p>All WiFi settings cleared.</p><p>Restarting...</p>";
-    }
-    
-    request->send(200, "text/html", html);
-    
-    // Schedule restart - don't block the async web server thread
-    extern bool g_restartRequested;
-    g_restartRequested = true;
 }
 
 // Static WebSocket event handler (needed for C-style callback)

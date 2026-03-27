@@ -85,7 +85,7 @@ public:
      * @brief Set animation state
      * @param enabled True to enable animations, false to disable
      */
-    void setAnimationEnabled(bool enabled) { showAnimation_ = enabled; }
+    void setAnimationEnabled(bool enabled);
     
     /**
      * @brief Check if animations are enabled
@@ -97,7 +97,7 @@ public:
      * @brief Set current animation type
      * @param animation Animation type to set
      */
-    void setCurrentAnimation(AnimationType animation) { currentAnimation_ = animation; }
+    void setCurrentAnimation(AnimationType animation);
     
     /**
      * @brief Get current animation type
@@ -109,7 +109,7 @@ public:
      * @brief Set VU mode state
      * @param enabled True to enable VU brightness control
      */
-    void setVuMode(bool enabled) { vuMode_ = enabled; }
+    void setVuMode(bool enabled);
     
     /**
      * @brief Check if VU mode is enabled
@@ -121,19 +121,47 @@ public:
      * @brief Set white mode state
      * @param enabled True to enable white mode
      */
-    void setWhiteMode(bool enabled) { whiteMode_ = enabled; }
-    
+    void setWhiteMode(bool enabled);
+
     /**
      * @brief Check if white mode is enabled
      * @return True if white mode is enabled
      */
     bool isWhiteModeEnabled() const { return whiteMode_; }
-    
+
     /**
-     * @brief Fill all LEDs with a color
+     * @brief Set solid color mode with specified color
+     * @param color Color to set
+     */
+    void setSolidColor(CRGB color);
+
+    /**
+     * @brief Get current solid color
+     * @return Current solid color
+     */
+    CRGB getSolidColor() const { return solidColor_; }
+
+    /**
+     * @brief Fill all LEDs with a color (immediate, no state change)
      * @param color Color to fill with
      */
     void fillColor(CRGB color);
+
+    /**
+     * @brief Mark state as dirty (needs saving after debounce)
+     */
+    void markStateDirty();
+
+    /**
+     * @brief Check if saved state was loaded on boot
+     * @return True if state was loaded from preferences
+     */
+    bool hasLoadedState() const { return stateLoaded_; }
+
+    /**
+     * @brief Clear saved LED state from preferences
+     */
+    void clearSavedState();
     
     /**
      * @brief Fill all LEDs with white
@@ -209,6 +237,13 @@ private:
     bool vuMode_;
     bool whiteMode_;
     AnimationType currentAnimation_;
+    CRGB solidColor_;
+
+    // State persistence
+    bool stateDirty_;
+    bool stateLoaded_;
+    unsigned long stateChangedTime_;
+    static const unsigned long STATE_SAVE_DEBOUNCE_MS = 5000;
     
     // VU data
     int vuLevels_[7];
@@ -224,6 +259,9 @@ private:
     
     // Private methods
     void loadConfiguration();
+    void loadState();
+    void saveState();
+    void saveStateIfNeeded();
     bool allocateLedArrays();
     void deallocateLedArrays();
     void updateBrightness();

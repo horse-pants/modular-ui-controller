@@ -29,6 +29,20 @@
             <p style="margin-top: 1.5rem;">
                 <a href="/">Back</a>
             </p>
+
+            <hr style="margin: 2rem 0; border-color: #333;">
+
+            <div style="text-align: center;">
+                <h3 style="color: #f88;">Reset LED State</h3>
+                <p style="font-size: 0.9rem; color: #888;">
+                    Clear saved brightness, color, animation, and mode settings.<br>
+                    Device will boot with default red fade-in after restart.
+                </p>
+                <button type="button" onclick="clearLedState()"
+                        style="background: #622; border-color: #a44;">
+                    Clear Saved State
+                </button>
+            </div>
         </div>
     </main>
 
@@ -54,6 +68,19 @@
 
         document.getElementById('num_strips').addEventListener('input', updateTotal);
         document.getElementById('leds_per_strip').addEventListener('input', updateTotal);
+
+        function clearLedState() {
+            if (confirm('Clear all saved LED state preferences?\n\nThis will reset brightness, color, animation, and mode settings. The device will show the default red fade-in on next boot.')) {
+                fetch('/clear-led-state', { method: 'POST' })
+                    .then(response => response.text())
+                    .then(html => {
+                        document.body.innerHTML = html;
+                    })
+                    .catch(err => {
+                        alert('Error clearing state: ' + err);
+                    });
+            }
+        }
     </script>
 </body>
 </html>
