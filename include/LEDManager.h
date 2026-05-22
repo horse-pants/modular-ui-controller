@@ -303,12 +303,3 @@ private:
 
 // Global LED manager instance
 extern LEDManager* g_ledManager;
-
-// Legacy compatibility - global state variables accessible to other modules
-extern uint8_t brightness;
-extern bool showAnimation;
-extern bool vu;
-extern bool white;
-extern LEDManager::AnimationType currentAnimation;
-extern int vuValue[7];
-extern int audioLevel;

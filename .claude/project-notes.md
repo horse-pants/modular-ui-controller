@@ -79,11 +79,10 @@
 ### Global Managers
 ```cpp
 extern UIManager* g_uiManager;           // LVGL UI
-extern WiFiSetupManager* g_wifiManager;  // WiFi
+extern NetworkManager* g_networkManager; // WiFi + boot UI wrapper
 extern LEDManager* g_ledManager;         // LED animations
 extern WebUIManager* g_webUIManager;     // Web interface
 extern OTAManager* g_otaManager;         // Firmware updates
-extern WiFiSetupBootUI* g_bootUI;        // WiFi setup display
 ```
 
 ### Main Loop Pattern
@@ -91,7 +90,7 @@ extern WiFiSetupBootUI* g_bootUI;        // WiFi setup display
 loop():
   - LVGL tick updates
   - UIManager update
-  - WiFiSetupManager update (DNS in AP mode)
+  - NetworkManager update (WiFi/DNS)
   - LEDManager update (animations)
   - WebUIManager update (WebSocket cleanup)
   - OTAManager loop

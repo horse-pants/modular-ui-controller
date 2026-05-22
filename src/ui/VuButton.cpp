@@ -98,10 +98,9 @@ void VuButton::setState(bool isActive) {
     if (!initialized_ || !button_) {
         return;
     }
-    
+
     currentState_ = isActive;
-    vu = isActive; // Update global state
-    
+
     if (isActive) {
         lv_obj_add_state(button_, LV_STATE_CHECKED);
     } else {
@@ -136,7 +135,10 @@ void VuButton::handleStateChange() {
         g_uiManager->logAndUpdateVuState(currentState_);
     } else {
         // Fallback if UIManager not available
-        vu = currentState_;
+        extern LEDManager* g_ledManager;
+        if (g_ledManager) {
+            g_ledManager->setVuMode(currentState_);
+        }
         updateWebUi();
     }
 

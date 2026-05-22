@@ -1,7 +1,6 @@
 #include "WebUIManager.h"
 #include "UIManager.h"
-// OLD: #include "WiFiManager.h"
-// NEW: Using library version
+#include "ui.h"
 #include <WiFiSetupManager.h>
 #include <OTAManager.h>
 #include <Logger.h>
@@ -9,21 +8,8 @@
 #include "ColourWheel.h"
 #include <FastLED.h>  // For CRGB color constants
 
-// Legacy global variables for backward compatibility
-extern uint8_t brightness;
-extern bool showAnimation;
-extern bool vu;
-extern bool white;
-extern LEDManager::AnimationType currentAnimation;
-
 // Global manager instances
-extern UIManager* g_uiManager;
-// OLD: extern WiFiManager* g_wifiManager;
-// NEW: Using library version WiFiSetupManager
-extern WiFiSetupManager* g_wifiManager;
 extern LEDManager* g_ledManager;
-extern BrightnessSlider* g_brightnessSlider;
-extern ColourWheel* g_colourWheel;
 
 // Global WebUI manager instance
 WebUIManager* g_webUIManager = nullptr;
@@ -186,75 +172,8 @@ bool WebUIManager::initializeLittleFS() {
 }
 
 void WebUIManager::writeEmbeddedFilesToFS() {
-    // NOTE: This function is no longer used - web files are now uploaded directly
-    // to the LittleFS partition via PlatformIO's build filesystem feature.
-    // The pre_build_littlefs.py script ensures mklittlefs is available in PATH.
+    // Web files are uploaded directly to LittleFS via PlatformIO's build filesystem feature
     Logger.debug("writeEmbeddedFilesToFS: Skipped (files loaded from LittleFS image)");
-
-    /* ORIGINAL CODE - Commented out but kept for reference
-    #include "WebFilesData.h"
-
-    struct WebFile {
-        const char* filename;
-        const char* content;
-    };
-
-    WebFile files[] = {
-        {"/index.html", INDEX_HTML},
-        {"/led-config.html", LED_CONFIG_HTML},
-        {"/style.css", STYLE_CSS},
-        {"/script.js", SCRIPT_JS},
-        {"/theme.js", THEME_JS}
-    };
-
-    Logger.debug("Checking web files...");
-    int written = 0;
-    int updated = 0;
-
-    for (const auto& webFile : files) {
-        bool needsWrite = false;
-
-        if (!LittleFS.exists(webFile.filename)) {
-            // File doesn't exist, write it
-            needsWrite = true;
-        } else {
-            // File exists, check if content matches
-            File existingFile = LittleFS.open(webFile.filename, "r");
-            if (existingFile) {
-                String existingContent = existingFile.readString();
-                existingFile.close();
-
-                String newContent = FPSTR(webFile.content);
-
-                if (existingContent != newContent) {
-                    Logger.debug("  %s has changed, updating...", webFile.filename);
-                    needsWrite = true;
-                    updated++;
-                }
-            } else {
-                needsWrite = true;
-            }
-        }
-
-        if (needsWrite) {
-            File file = LittleFS.open(webFile.filename, "w");
-            if (file) {
-                file.print(FPSTR(webFile.content));
-                file.close();
-                Logger.debug("  Writing %s from PROGMEM... OK", webFile.filename);
-                written++;
-            } else {
-                Logger.error("  Writing %s from PROGMEM... FAILED!", webFile.filename);
-            }
-        }
-    }
-
-    if (written > 0) {
-        Logger.info("Wrote %d files from PROGMEM (%d updated, %d new)", written, updated, written - updated);
-    } else {
-        Logger.debug("All web files are up to date");
-    }
-    */
 }
 
 void WebUIManager::initializeWebSocket() {
@@ -396,24 +315,24 @@ String WebUIManager::generateStateResponse() {
     
     JsonObject vu_ctrl = controls.add<JsonObject>();
     vu_ctrl["name"] = "vu";
-    vu_ctrl["state"] = vu;
-    
+    vu_ctrl["state"] = g_ledManager ? g_ledManager->isVuModeEnabled() : false;
+
     JsonObject white_ctrl = controls.add<JsonObject>();
     white_ctrl["name"] = "white";
-    white_ctrl["state"] = white;
-    
+    white_ctrl["state"] = g_ledManager ? g_ledManager->isWhiteModeEnabled() : false;
+
     JsonObject anim_ctrl = controls.add<JsonObject>();
     anim_ctrl["name"] = "animation";
-    anim_ctrl["state"] = showAnimation;
-    anim_ctrl["animation"] = currentAnimation;
-    
+    anim_ctrl["state"] = g_ledManager ? g_ledManager->isAnimationEnabled() : false;
+    anim_ctrl["animation"] = g_ledManager ? static_cast<int>(g_ledManager->getCurrentAnimation()) : 0;
+
     JsonObject color_ctrl = controls.add<JsonObject>();
     color_ctrl["name"] = "colour";
     color_ctrl["state"] = g_colourWheel ? g_colourWheel->getColorHex() : "#000000";
-    
+
     JsonObject brightness_ctrl = controls.add<JsonObject>();
     brightness_ctrl["name"] = "brightness";
-    brightness_ctrl["state"] = brightness;
+    brightness_ctrl["state"] = g_ledManager ? g_ledManager->getBrightness() : 128;
 
     String output;
     serializeJson(doc, output);
@@ -489,7 +408,6 @@ void WebUIManager::handleBrightnessMessage(const JsonDocument& request) {
         // Trigger callback to update global state and notify other clients
         g_brightnessSlider->setBrightness(newBrightness, true, true);
     } else {
-        brightness = newBrightness;
         if (g_ledManager) {
             g_ledManager->setBrightness(newBrightness);
         }
@@ -524,22 +442,7 @@ void WebUIManager::staticWebSocketEventHandler(AsyncWebSocket* server, AsyncWebS
     }
 }
 
-// Legacy function compatibility
-void setupWebUi() {
-    // NOTE: This legacy function is deprecated
-    // WebUIManager should now be constructed with WiFiSetupManager's web server
-    // See main.cpp for proper initialization
-    if (g_webUIManager) {
-        g_webUIManager->initialize();
-    }
-}
-
-void webUiLoop() {
-    if (g_webUIManager) {
-        g_webUIManager->update();
-    }
-}
-
+// Web UI notification helper
 void updateWebUi() {
     if (g_webUIManager) {
         g_webUIManager->notifyClients();

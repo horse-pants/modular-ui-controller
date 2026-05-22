@@ -68,7 +68,6 @@ void Analyzer::ReadFreq(int *value)
 		{
 			RstModule();
 			RstState = false;
-			//Serial.println("Rst");
 		}
 	}
 

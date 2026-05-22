@@ -414,13 +414,16 @@ void UIManager::applyCurrentColor() {
     if (colourWheel_) {
         uint8_t r, g, b;
         colourWheel_->getColorRGB(r, g, b);
-        showAnimation = false;
-        FastLED.clear();
-        colorFill(CRGB(r, g, b));
+
+        if (g_ledManager) {
+            g_ledManager->setAnimationEnabled(false);
+            g_ledManager->setWhiteMode(false);
+            g_ledManager->fillColor(CRGB(r, g, b));
+        }
+
         if (whiteButton_) {
             whiteButton_->setState(false, false);
         }
-        white = false;
 
         // Deactivate effects dropdown (color is now active, not animation)
         if (effectsList_) {
@@ -428,23 +431,12 @@ void UIManager::applyCurrentColor() {
         }
 
         updateWebUi();
-
-        // Update LED manager
-        extern LEDManager* g_ledManager;
-        if (g_ledManager) {
-            g_ledManager->setAnimationEnabled(false);
-            g_ledManager->setWhiteMode(false);
-        }
     }
 }
 
 void UIManager::logAndUpdateVuState(bool newState) {
     Logger.info("VU Button - State: %s", newState ? "ON" : "OFF");
 
-    vu = newState;
-
-    // Update LED manager
-    extern LEDManager* g_ledManager;
     if (g_ledManager) {
         g_ledManager->setVuMode(newState);
     }
@@ -455,25 +447,17 @@ void UIManager::logAndUpdateVuState(bool newState) {
 void UIManager::logAndUpdateWhiteState(bool newState) {
     Logger.info("White Button - State: %s", newState ? "ON" : "OFF");
 
-    white = newState;
-
-    if (newState) {
-        showAnimation = false;
-        fillWhite();
-        // Deactivate effects dropdown styling when white is on
-        if (effectsList_) {
-            effectsList_->setActiveState(false);
-        }
-    }
-
-    // Update LED manager
-    extern LEDManager* g_ledManager;
     if (g_ledManager) {
         g_ledManager->setWhiteMode(newState);
         if (newState) {
             g_ledManager->setAnimationEnabled(false);
-            showAnimation = false;
+            g_ledManager->fillWhite();
         }
+    }
+
+    // Deactivate effects dropdown styling when white is on
+    if (newState && effectsList_) {
+        effectsList_->setActiveState(false);
     }
 
     updateWebUi();
@@ -496,21 +480,19 @@ void UIManager::setWhiteState(bool newState) {
 }
 
 void UIManager::setAnimationState(bool newState) {
-    showAnimation = newState;
+    if (g_ledManager) {
+        g_ledManager->setAnimationEnabled(newState);
+        if (newState) {
+            g_ledManager->setWhiteMode(false);
+        }
+    }
+
     if (newState) {
         if (whiteButton_) {
             whiteButton_->setState(false, false);
         }
-        white = false;
-        FastLED.clear();
     } else {
         applyCurrentColor();
-    }
-    
-    // Update LED manager
-    extern LEDManager* g_ledManager;
-    if (g_ledManager) {
-        g_ledManager->setAnimationEnabled(newState);
     }
 }
 
@@ -519,24 +501,19 @@ void UIManager::setAnimation(int animation) {
         effectsList_->setSelectedEffect(animation, false);
         effectsList_->setActiveState(true);  // Highlight as active
     }
-    showAnimation = true;
-    currentAnimation = static_cast<animationOptions>(animation);
+
     if (whiteButton_) {
         whiteButton_->setState(false, false);
     }
-    white = false;
-    FastLED.clear();
 
-    // Update LED manager
-    extern LEDManager* g_ledManager;
     if (g_ledManager) {
         g_ledManager->setCurrentAnimation(static_cast<LEDManager::AnimationType>(animation));
         g_ledManager->setAnimationEnabled(true);
+        g_ledManager->setWhiteMode(false);
     }
 }
 
 void UIManager::syncWithLEDState() {
-    extern LEDManager* g_ledManager;
     if (!g_ledManager) return;
 
     Logger.info("Syncing UI with LED state...");
@@ -550,24 +527,19 @@ void UIManager::syncWithLEDState() {
     if (vuButton_) {
         vuButton_->setState(g_ledManager->isVuModeEnabled());
     }
-    vu = g_ledManager->isVuModeEnabled();
 
     // Sync white button
     if (whiteButton_) {
         whiteButton_->setState(g_ledManager->isWhiteModeEnabled(), false);
     }
-    white = g_ledManager->isWhiteModeEnabled();
 
     // Sync animation/effects dropdown
     if (g_ledManager->isAnimationEnabled()) {
-        showAnimation = true;
-        currentAnimation = static_cast<animationOptions>(g_ledManager->getCurrentAnimation());
         if (effectsList_) {
             effectsList_->setSelectedEffect(static_cast<int>(g_ledManager->getCurrentAnimation()), false);
             effectsList_->setActiveState(true);
         }
     } else {
-        showAnimation = false;
         if (effectsList_) {
             effectsList_->setActiveState(false);
         }
@@ -702,41 +674,36 @@ bool UIManager::initializeComponents() {
 
     // Brightness fader (vertical)
     brightnessSlider_.reset(new BrightnessSlider(255));
+    g_brightnessSlider = brightnessSlider_.get();
     if (brightnessSlider_) {
         brightnessSlider_->setCallback([this](int newBrightness) {
-            brightness = newBrightness;
-            vu = false;
-            if (vuButton_) {
-                vuButton_->setState(false);
-            }
-            updateWebUi();
-
-            extern LEDManager* g_ledManager;
             if (g_ledManager) {
                 g_ledManager->setBrightness(newBrightness);
                 g_ledManager->setVuMode(false);
             }
+            if (vuButton_) {
+                vuButton_->setState(false);
+            }
+            updateWebUi();
         });
 
-        if (!brightnessSlider_->initialize(leftColumn, brightness)) {
+        int initialBrightness = g_ledManager ? g_ledManager->getBrightness() : 128;
+        if (!brightnessSlider_->initialize(leftColumn, initialBrightness)) {
             return false;
         }
     }
 
     // VU button (directly under fader)
     vuButton_.reset(new VuButton());
+    g_vuButton = vuButton_.get();
     if (vuButton_ && !vuButton_->initialize(leftColumn)) {
         return false;
     }
     if (vuButton_) {
         vuButton_->setCallback([this](bool newState) {
-            vu = newState;
-
-            extern LEDManager* g_ledManager;
             if (g_ledManager) {
                 g_ledManager->setVuMode(newState);
             }
-
             updateWebUi();
         });
     }
@@ -753,6 +720,7 @@ bool UIManager::initializeComponents() {
     lv_obj_clear_flag(wheelContainer, LV_OBJ_FLAG_SCROLLABLE);
 
     colourWheel_.reset(new ColourWheel());
+    g_colourWheel = colourWheel_.get();
     if (colourWheel_ && !colourWheel_->initialize(wheelContainer, 180, true)) {
         return false;
     }
@@ -775,21 +743,19 @@ bool UIManager::initializeComponents() {
 
     // White button
     whiteButton_.reset(new WhiteButton());
+    g_whiteButton = whiteButton_.get();
     if (whiteButton_ && !whiteButton_->initialize(bottomRow)) {
         return false;
     }
 
     // Effects dropdown
     effectsList_.reset(new EffectsList());
+    g_effectsList = effectsList_.get();
     if (effectsList_ && !effectsList_->initialize(bottomRow)) {
         return false;
     }
     if (effectsList_) {
         effectsList_->setCallback([this](int effectIndex) {
-            showAnimation = true;
-            currentAnimation = static_cast<LEDManager::AnimationType>(effectIndex);
-
-            extern LEDManager* g_ledManager;
             if (g_ledManager) {
                 g_ledManager->setAnimationEnabled(true);
                 g_ledManager->setCurrentAnimation(static_cast<LEDManager::AnimationType>(effectIndex));
@@ -806,6 +772,7 @@ bool UIManager::initializeComponents() {
     // TAB 2: VU GRAPH
     // ==========================================================================
     vuGraph_.reset(new VuGraph());
+    g_vuGraph = vuGraph_.get();
     if (vuGraph_ && !vuGraph_->initialize(tab2_)) {
         return false;
     }
@@ -832,6 +799,14 @@ void UIManager::setupTouchDriver() {
 }
 
 void UIManager::cleanup() {
+    // Clear global pointers before resetting smart pointers
+    g_brightnessSlider = nullptr;
+    g_colourWheel = nullptr;
+    g_effectsList = nullptr;
+    g_whiteButton = nullptr;
+    g_vuButton = nullptr;
+    g_vuGraph = nullptr;
+
     // Smart pointers will automatically clean up their resources
     brightnessSlider_.reset();
     colourWheel_.reset();

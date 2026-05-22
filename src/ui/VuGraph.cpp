@@ -191,19 +191,10 @@ void VuGraph::update() {
     if (!initialized_) {
         return;
     }
-    
+
     readFrequencies();
     updateVuBars();
     getVuLevels();
-    
-    // Sync global variables for LED animations
-    for (int i = 0; i < NUM_VU_CHANNELS && i < 7; i++) {
-        extern int vuValue[7];
-        vuValue[i] = vuValues_[i];
-    }
-    extern int audioLevel;
-    audioLevel = audioLevel_;
-    
 }
 
 int VuGraph::getOverallVolume() {
@@ -216,7 +207,8 @@ int VuGraph::getOverallVolume() {
 }
 
 void VuGraph::getVuLevels5() {
-    for (int i = 0; i < NUM_STRIPS; ++i) {
+    int numStrips = g_ledManager ? g_ledManager->getNumStrips() : 0;
+    for (int i = 0; i < numStrips && i < 5; ++i) {
         if(i == 0){
             int maxVu = max(filters_[i].Current(), filters_[i + 1].Current());
             vuValues_[i] = maxVu;
@@ -232,7 +224,8 @@ void VuGraph::getVuLevels5() {
 }
 
 void VuGraph::getVuLevels3() {
-    for (int i = 0; i < NUM_STRIPS; ++i) {
+    int numStrips = g_ledManager ? g_ledManager->getNumStrips() : 0;
+    for (int i = 0; i < numStrips && i < 3; ++i) {
         if(i == 0){
             int maxVu = max(filters_[0].Current(), filters_[1].Current());
             vuValues_[i] = maxVu;

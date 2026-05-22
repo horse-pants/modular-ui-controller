@@ -4,13 +4,8 @@
 #include "WhiteButton.h"
 #include "LEDManager.h"
 
-// External stuff you already use
-extern bool showAnimation;
-extern WhiteButton* g_whiteButton;
-extern bool white;
+// External references (g_whiteButton declared in ui.h)
 extern void updateWebUi();
-extern CRGB leds[];
-extern CFastLED FastLED;
 extern LEDManager* g_ledManager;
 
 ColourWheel::ColourWheel()
@@ -171,13 +166,13 @@ void ColourWheel::handleColorChange() {
     // Update LED strip via LEDManager (handles state persistence)
     if (g_ledManager) {
         g_ledManager->setSolidColor(CRGB(r, g, b));
+        g_ledManager->setWhiteMode(false);
     }
 
     // Clear white button state (prevent recursion)
     if (g_whiteButton && g_whiteButton->isInitialized()) {
         g_whiteButton->setState(false, false);
     }
-    white = false;
 
     // Update web UI
     updateWebUi();

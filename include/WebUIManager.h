@@ -97,16 +97,12 @@ private:
                                           AwsEventType type, void* arg, uint8_t* data, size_t len);
 };
 
-// Forward declaration
-class OTAManager;
-
 // Global WebUI manager instance
 extern WebUIManager* g_webUIManager;
 
 // Global OTA manager instance
+class OTAManager;
 extern OTAManager* g_otaManager;
 
-// Legacy function compatibility - these will call WebUIManager methods
-void setupWebUi();
-void webUiLoop();
+// Web UI notification helper
 void updateWebUi();

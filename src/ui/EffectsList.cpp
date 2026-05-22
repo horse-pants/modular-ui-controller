@@ -186,16 +186,18 @@ void EffectsList::handleEffectChange() {
 
     int selectedEffect = getSelectedEffect();
 
-    // Update global state
-    showAnimation = true;
-    currentAnimation = static_cast<animationOptions>(selectedEffect);
+    // Update LED manager state
+    extern LEDManager* g_ledManager;
+    if (g_ledManager) {
+        g_ledManager->setAnimationEnabled(true);
+        g_ledManager->setCurrentAnimation(static_cast<LEDManager::AnimationType>(selectedEffect));
+        g_ledManager->setWhiteMode(false);
+    }
 
     // Clear white button state
     if (g_whiteButton && g_whiteButton->isInitialized()) {
         g_whiteButton->setState(false, false);
     }
-    white = false;
-    FastLED.clear();
 
     // Update web UI
     updateWebUi();

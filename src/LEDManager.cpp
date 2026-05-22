@@ -1,17 +1,9 @@
 #include "LEDManager.h"
 #include "UIManager.h"
+#include <Logger.h>
 
 // Global LED manager instance
 LEDManager* g_ledManager = nullptr;
-
-// Legacy compatibility - global state variables
-uint8_t brightness = 128;
-bool showAnimation = false;
-bool vu = false;
-bool white = false;
-LEDManager::AnimationType currentAnimation = LEDManager::RAINBOW;
-int vuValue[7] = {0, 0, 0, 0, 0, 0, 0};
-int audioLevel = 0;
 
 // Static animation descriptions ((A) = audio reactive)
 const char* LEDManager::animationDescriptions_[] = {
@@ -73,13 +65,13 @@ bool LEDManager::initialize() {
     loadConfiguration();
 
     if (!isConfigValid()) {
-        Serial.println("Warning: No valid LED configuration found. LED functions disabled.");
-        Serial.println("Please configure LED settings through the setup page.");
+        Logger.warning("No valid LED configuration found. LED functions disabled.");
+        Logger.warning("Please configure LED settings through the setup page.");
         return false;
     }
 
     if (!allocateLedArrays()) {
-        Serial.println("Error: Failed to allocate memory for LEDs");
+        Logger.error("Failed to allocate memory for LEDs");
         return false;
     }
 
@@ -91,16 +83,9 @@ bool LEDManager::initialize() {
     // Load saved LED state (brightness, mode, color, animation, etc.)
     loadState();
 
-    // Sync legacy global variables
-    brightness = brightness_;
-    showAnimation = showAnimation_;
-    vu = vuMode_;
-    white = whiteMode_;
-    currentAnimation = currentAnimation_;
-
     initialized_ = true;
-    Serial.printf("LED Manager initialized: %d strips, %d LEDs/strip, %d total\n",
-                 numStrips_, ledsPerStrip_, totalLeds_);
+    Logger.info("LED Manager initialized: %d strips, %d LEDs/strip, %d total",
+                numStrips_, ledsPerStrip_, totalLeds_);
     return true;
 }
 
@@ -124,18 +109,10 @@ void LEDManager::update() {
 
     // Check if state needs saving (debounced)
     saveStateIfNeeded();
-
-    // Keep legacy variables in sync
-    brightness = brightness_;
-    showAnimation = showAnimation_;
-    vu = vuMode_;
-    white = whiteMode_;
-    currentAnimation = currentAnimation_;
 }
 
 void LEDManager::setBrightness(uint8_t newBrightness) {
     brightness_ = newBrightness;
-    brightness = brightness_; // Sync legacy global
     markStateDirty();
 }
 
@@ -257,13 +234,11 @@ void LEDManager::fillWhite() {
     fillColor(CRGB(255, 255, 255));
 }
 
-void LEDManager::updateVuLevels(const int* vuLevels, int audioLevel) {
+void LEDManager::updateVuLevels(const int* vuLevels, int level) {
     for (int i = 0; i < 7; i++) {
         vuLevels_[i] = vuLevels[i];
-        vuValue[i] = vuLevels[i]; // Sync legacy global
     }
-    audioLevel_ = audioLevel;
-    audioLevel = audioLevel_; // Sync legacy global
+    audioLevel_ = level;
 }
 
 int LEDManager::getVuForStrip(int strip) const {
@@ -397,8 +372,8 @@ void LEDManager::loadConfiguration() {
     preferences_.end();
     configLoaded_ = true;
 
-    Serial.printf("Loaded LED config: %d strips, %d LEDs/strip, %d total\n",
-                 numStrips_, ledsPerStrip_, totalLeds_);
+    Logger.info("Loaded LED config: %d strips, %d LEDs/strip, %d total",
+                numStrips_, ledsPerStrip_, totalLeds_);
 }
 
 void LEDManager::loadState() {
@@ -407,7 +382,7 @@ void LEDManager::loadState() {
 
     // Check if we have saved state
     if (!statePrefs.isKey("brightness")) {
-        Serial.println("No saved LED state found, using defaults (red fade-in)");
+        Logger.info("No saved LED state found, using defaults (red fade-in)");
         stateLoaded_ = false;
         statePrefs.end();
         return;
@@ -428,9 +403,9 @@ void LEDManager::loadState() {
     statePrefs.end();
     stateLoaded_ = true;
 
-    Serial.printf("Loaded LED state: bright=%d, anim=%d, white=%d, vu=%d, animIdx=%d, color=#%02X%02X%02X\n",
-                 brightness_, showAnimation_, whiteMode_, vuMode_, currentAnimation_,
-                 solidColor_.r, solidColor_.g, solidColor_.b);
+    Logger.info("Loaded LED state: bright=%d, anim=%d, white=%d, vu=%d, animIdx=%d, color=#%02X%02X%02X",
+                brightness_, showAnimation_, whiteMode_, vuMode_, currentAnimation_,
+                solidColor_.r, solidColor_.g, solidColor_.b);
 }
 
 void LEDManager::clearSavedState() {
@@ -439,7 +414,7 @@ void LEDManager::clearSavedState() {
     statePrefs.clear();
     statePrefs.end();
     stateLoaded_ = false;
-    Serial.println("LED state preferences cleared");
+    Logger.info("LED state preferences cleared");
 }
 
 void LEDManager::saveState() {
@@ -458,7 +433,7 @@ void LEDManager::saveState() {
 
     statePrefs.end();
 
-    Serial.println("LED state saved to preferences");
+    Logger.debug("LED state saved to preferences");
 }
 
 void LEDManager::saveStateIfNeeded() {
@@ -510,8 +485,8 @@ bool LEDManager::allocateLedArrays() {
     if (leds_ || totalLeds_ <= 0) {
         return false;
     }
-    
-    Serial.printf("Allocating memory for %d LEDs\n", totalLeds_);
+
+    Logger.debug("Allocating memory for %d LEDs", totalLeds_);
     leds_ = new CRGB[totalLeds_];
     return (leds_ != nullptr);
 }
@@ -1028,75 +1003,4 @@ void LEDManager::animationConfetti() {
     }
 
     confettiHue += 1;
-}
-
-// Legacy wrapper functions for backward compatibility
-// These functions call the appropriate LEDManager methods
-
-void setupFastLED() {
-    if (!g_ledManager) {
-        g_ledManager = new LEDManager();
-    }
-    if (g_ledManager) {
-        g_ledManager->initialize();
-    }
-}
-
-void handleLEDs() {
-    if (g_ledManager) {
-        g_ledManager->update();
-    }
-}
-
-void fillWhite() {
-    if (g_ledManager) {
-        g_ledManager->fillWhite();
-    }
-}
-
-void colorFill(CRGB c) {
-    if (g_ledManager) {
-        g_ledManager->fillColor(c);
-    }
-}
-
-void getVuLevels() {
-    // VU levels are automatically updated by VuGraph::update() in the main loop
-    // This function is kept for compatibility but doesn't need to do anything
-    // since the global vuValue array is already being synchronized
-}
-
-int getVuForStrip(int strip) {
-    if (g_ledManager) {
-        return g_ledManager->getVuForStrip(strip);
-    }
-    return 0;
-}
-
-int getNumStrips() {
-    if (g_ledManager) {
-        return g_ledManager->getNumStrips();
-    }
-    return 0;
-}
-
-int getLedsPerStrip() {
-    if (g_ledManager) {
-        return g_ledManager->getLedsPerStrip();
-    }
-    return 0;
-}
-
-int getTotalLeds() {
-    if (g_ledManager) {
-        return g_ledManager->getTotalLeds();
-    }
-    return 0;
-}
-
-bool isLedConfigValid() {
-    if (g_ledManager) {
-        return g_ledManager->isConfigValid();
-    }
-    return false;
 }

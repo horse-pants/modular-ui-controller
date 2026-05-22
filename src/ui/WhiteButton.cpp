@@ -98,14 +98,17 @@ void WhiteButton::setState(bool isWhite, bool triggerCallback) {
     if (!initialized_ || !button_) {
         return;
     }
-    
+
     currentState_ = isWhite;
-    white = isWhite; // Update global state
-    
+
     if (isWhite) {
         lv_obj_add_state(button_, LV_STATE_CHECKED);
-        showAnimation = false;
-        fillWhite();
+        extern LEDManager* g_ledManager;
+        if (g_ledManager) {
+            g_ledManager->setWhiteMode(true);
+            g_ledManager->setAnimationEnabled(false);
+            g_ledManager->fillWhite();
+        }
     } else {
         lv_obj_clear_state(button_, LV_STATE_CHECKED);
         // Only apply color if this isn't a programmatic call to prevent recursion
@@ -142,10 +145,13 @@ void WhiteButton::handleStateChange() {
         g_uiManager->logAndUpdateWhiteState(currentState_);
     } else {
         // Fallback if UIManager not available
-        white = currentState_;
-        if (currentState_) {
-            showAnimation = false;
-            fillWhite();
+        extern LEDManager* g_ledManager;
+        if (g_ledManager) {
+            g_ledManager->setWhiteMode(currentState_);
+            if (currentState_) {
+                g_ledManager->setAnimationEnabled(false);
+                g_ledManager->fillWhite();
+            }
         }
         updateWebUi();
     }
