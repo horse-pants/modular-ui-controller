@@ -86,6 +86,12 @@ public:
      * @param enabled True to enable animations, false to disable
      */
     void setAnimationEnabled(bool enabled);
+
+    /**
+     * @brief Enter / leave OTA mode. While in OTA mode, update() is a no-op so
+     *        the OTA progress display isn't fought by the normal brightness tick.
+     */
+    void setOTAMode(bool enabled);
     
     /**
      * @brief Check if animations are enabled
@@ -251,6 +257,9 @@ private:
 
     // OTA progress tracking
     uint8_t lastOTAProgress_;
+    // While true, update() is suspended so showOTAProgress() can own the strips
+    // without the normal brightness/animation tick fighting it.
+    bool otaMode_;
 
     Preferences preferences_;
     

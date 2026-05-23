@@ -1,0 +1,389 @@
+/* Theme variables — accent matches LVGL UI_COLOR_PRIMARY (0x00D9FF). */
+:root {
+  color-scheme: dark;
+
+  /* Background colors */
+  --bg-dark: #07090e;
+  --bg-control: #11141c;
+  --bg-lighter: #1a1f2b;
+  --bg-overlay: rgba(4, 6, 12, 0.72);
+
+  /* Surface (glass) — used over the aurora background */
+  --surface: rgba(20, 24, 34, 0.78);
+  --surface-elevated: rgba(28, 33, 46, 0.82);
+  --surface-sunken: rgba(6, 9, 14, 0.6);
+  --surface-border: rgba(255, 255, 255, 0.06);
+  --surface-highlight: rgba(255, 255, 255, 0.04);
+
+  /* Border colors */
+  --border: #232a38;
+  --border-focus: #00d9ff;
+
+  /* Text colors */
+  --text-primary: #eaf2f8;
+  --text-muted: #8d97aa;
+
+  /* Accent colors — cyan to match the LVGL UI */
+  --primary: #00d9ff;
+  --primary-dark: #008bb3;
+  --primary-glow: rgba(0, 217, 255, 0.35);
+  /* Foreground colour for elements sitting on a --primary fill.
+     Dark mode: cyan is bright, so near-black reads best.
+     Light mode: teal is darker (see override below) — white reads best. */
+  --on-primary: #07090e;
+  --accent: #ff0080;
+  --accent-dark: #cc0066;
+  --danger: #ef4444;
+  --danger-dark: #dc2626;
+  --success: #10b981;
+  --warning: #f59e0b;
+
+  /* Aurora background tones */
+  --aurora-1: rgba(0, 217, 255, 0.22);
+  --aurora-2: rgba(139, 92, 246, 0.20);
+  --aurora-3: rgba(255, 0, 128, 0.16);
+
+  /* Dimensions */
+  --radius-modal: 18px;
+  --radius-button: 10px;
+  --radius-card: 14px;
+
+  /* Shadows */
+  --shadow-card: 0 4px 24px rgba(0, 0, 0, 0.35);
+  --shadow-modal: 0 24px 64px rgba(0, 0, 0, 0.55), 0 0 0 1px var(--surface-border);
+}
+
+/* Light mode — applied by toggling `.light` on <body>. */
+body.light {
+  color-scheme: light;
+
+  --bg-dark: #f4f6fb;
+  --bg-control: #ffffff;
+  --bg-lighter: #eef1f7;
+  --bg-overlay: rgba(255, 255, 255, 0.7);
+
+  --surface: rgba(255, 255, 255, 0.78);
+  --surface-elevated: rgba(255, 255, 255, 0.92);
+  --surface-sunken: rgba(240, 243, 250, 0.85);
+  --surface-border: rgba(15, 23, 42, 0.08);
+  --surface-highlight: rgba(255, 255, 255, 0.6);
+
+  --border: #d8def0;
+  --border-focus: #008bb3;
+
+  --text-primary: #0f172a;
+  --text-muted: #5a6478;
+
+  --primary: #008bb3;
+  --primary-dark: #006080;
+  --primary-glow: rgba(0, 139, 179, 0.30);
+  --on-primary: #ffffff;
+
+  /* Lighter, slightly warmer aurora over the pale background. */
+  --aurora-1: rgba(0, 217, 255, 0.20);
+  --aurora-2: rgba(139, 92, 246, 0.16);
+  --aurora-3: rgba(255, 0, 128, 0.12);
+
+  --shadow-card: 0 4px 18px rgba(15, 23, 42, 0.10);
+  --shadow-modal: 0 24px 64px rgba(15, 23, 42, 0.18), 0 0 0 1px var(--surface-border);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  min-height: 100vh;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: var(--text-primary);
+  line-height: 1.55;
+  background: var(--bg-dark);
+  position: relative;
+  overflow-x: hidden;
+}
+
+/* Aurora background — fixed, behind everything, drifts slowly. */
+body::before,
+body::after {
+  content: '';
+  position: fixed;
+  inset: -20%;
+  z-index: -1;
+  pointer-events: none;
+  filter: blur(80px);
+  opacity: 0.9;
+}
+
+body::before {
+  background:
+    radial-gradient(40% 50% at 15% 20%, var(--aurora-1) 0%, transparent 60%),
+    radial-gradient(35% 45% at 85% 30%, var(--aurora-2) 0%, transparent 60%),
+    radial-gradient(45% 55% at 50% 90%, var(--aurora-3) 0%, transparent 60%);
+  animation: auroraDrift 32s ease-in-out infinite alternate;
+}
+
+body::after {
+  background:
+    radial-gradient(35% 40% at 80% 80%, var(--aurora-2) 0%, transparent 60%),
+    radial-gradient(30% 40% at 20% 75%, var(--aurora-3) 0%, transparent 60%);
+  animation: auroraDrift 44s ease-in-out -12s infinite alternate-reverse;
+  opacity: 0.6;
+}
+
+@keyframes auroraDrift {
+  0%   { transform: translate3d(0, 0, 0) scale(1); }
+  50%  { transform: translate3d(3%, -2%, 0) scale(1.08); }
+  100% { transform: translate3d(-2%, 3%, 0) scale(1.04); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body::before,
+  body::after {
+    animation: none;
+  }
+}
+
+/* Buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.7rem 1.1rem;
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-button);
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  transition: transform 0.12s ease, background 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, color 0.18s ease;
+  background: var(--bg-lighter);
+  color: var(--text-primary);
+  font-family: inherit;
+}
+
+.btn:hover {
+  background: var(--surface-elevated);
+  border-color: var(--primary);
+  color: var(--primary);
+  box-shadow: 0 0 0 1px var(--primary-glow);
+}
+
+.btn:active {
+  transform: translateY(1px);
+}
+
+.btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--primary-glow);
+}
+
+.btn.active,
+.btn.active:hover {
+  background: linear-gradient(180deg, var(--primary), var(--primary-dark));
+  color: var(--on-primary);
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 4px 14px var(--primary-glow), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+
+.btn-primary {
+  background: linear-gradient(180deg, var(--primary), var(--primary-dark));
+  color: var(--on-primary);
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 4px 14px var(--primary-glow), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+
+.btn-primary:hover {
+  background: linear-gradient(180deg, var(--primary), var(--primary-dark));
+  color: var(--on-primary);
+  filter: brightness(1.08);
+}
+
+.btn-danger {
+  background: linear-gradient(180deg, var(--danger), var(--danger-dark));
+  color: white;
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 4px 14px rgba(239, 68, 68, 0.30), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+.btn-danger:hover {
+  background: linear-gradient(180deg, #f56565, var(--danger));
+}
+
+.btn-small {
+  padding: 0.35rem 0.7rem;
+  font-size: 0.8rem;
+}
+
+/* Form elements */
+input, select, textarea {
+  width: 100%;
+  padding: 0.65rem 0.85rem;
+  background: var(--surface-sunken);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-button);
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  font-family: inherit;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+}
+
+input::placeholder, textarea::placeholder {
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+
+input:hover, select:hover, textarea:hover {
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px var(--primary-glow);
+  background: var(--surface-elevated);
+}
+
+input[type="checkbox"], input[type="radio"] {
+  width: auto;
+  accent-color: var(--primary);
+}
+
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'><path fill='%238d97aa' d='M6 8 0 0h12z'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 0.85rem center;
+  background-size: 10px 7px;
+  padding-right: 2.2rem;
+  cursor: pointer;
+  /* Tints the OS-level dropdown hover highlight in Chromium so it matches our
+     cyan palette instead of the harsh system blue. */
+  accent-color: var(--primary);
+}
+
+option {
+  background: var(--bg-control);
+  color: var(--text-primary);
+  padding: 0.4rem 0.6rem;
+}
+
+option:checked {
+  background: var(--primary);
+  color: var(--on-primary);
+}
+
+/* Range slider */
+input[type="range"] {
+  appearance: none;
+  -webkit-appearance: none;
+  background: var(--surface-sunken);
+  border: 1px solid var(--surface-border);
+  height: 10px;
+  padding: 0;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: linear-gradient(180deg, var(--primary), var(--primary-dark));
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 2px 10px var(--primary-glow);
+  cursor: pointer;
+}
+
+input[type="range"]::-moz-range-thumb {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: linear-gradient(180deg, var(--primary), var(--primary-dark));
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 2px 10px var(--primary-glow);
+  cursor: pointer;
+}
+
+label {
+  display: block;
+  margin-bottom: 0.35rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.form-group {
+  margin-bottom: 1rem;
+}
+
+/* Cards */
+.card {
+  background: var(--surface);
+  border-radius: var(--radius-card);
+  padding: 1.4rem;
+  margin-bottom: 1rem;
+  border: 1px solid var(--surface-border);
+  box-shadow: var(--shadow-card), inset 0 1px 0 var(--surface-highlight);
+}
+
+@supports (backdrop-filter: blur(1px)) {
+  .card {
+    backdrop-filter: blur(18px) saturate(140%);
+    -webkit-backdrop-filter: blur(18px) saturate(140%);
+  }
+}
+
+.card h3 {
+  margin-bottom: 0.75rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* Utility */
+.text-muted {
+  color: var(--text-muted);
+}
+
+.text-small {
+  font-size: 0.85rem;
+}
+
+.flex { display: flex; }
+.flex-col { flex-direction: column; }
+.gap-1 { gap: 0.25rem; }
+.gap-2 { gap: 0.5rem; }
+.gap-3 { gap: 0.75rem; }
+.gap-4 { gap: 1rem; }
+.justify-between { justify-content: space-between; }
+.items-center { align-items: center; }
+
+/* Custom scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
+}
+
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.10);
+  border-radius: 10px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.18);
+  background-clip: padding-box;
+}

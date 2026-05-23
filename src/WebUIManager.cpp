@@ -57,9 +57,13 @@ bool WebUIManager::initialize() {
     if (g_otaManager) {
         // Set start callback
         g_otaManager->setStartCallback([]() {
-            // Turn off animations during OTA
+            // Take the LED strips out of normal update() so the OTA progress
+            // display owns them — otherwise the main loop slams brightness
+            // back to the user's saved value between progress ticks and the
+            // bar flickers the whole way.
             if (g_ledManager) {
                 g_ledManager->setAnimationEnabled(false);
+                g_ledManager->setOTAMode(true);
             }
         });
 
@@ -86,7 +90,8 @@ bool WebUIManager::initialize() {
         // Set end callback for failure handling
         g_otaManager->setEndCallback([](bool success) {
             if (!success) {
-                // Flash red on failure
+                // Flash red on failure — keep otaMode_ on so update() doesn't
+                // fight the flash, then release the strips back to normal.
                 if (g_ledManager) {
                     for (int i = 0; i < 3; i++) {
                         g_ledManager->fillColor(CRGB::Red);
@@ -94,8 +99,10 @@ bool WebUIManager::initialize() {
                         g_ledManager->fillColor(CRGB::Black);
                         delay(200);
                     }
+                    g_ledManager->setOTAMode(false);
                 }
             }
+            // On success the device restarts, so the flag resets implicitly.
         });
 
         // Initialize OTA with the shared server
@@ -184,22 +191,11 @@ void WebUIManager::initializeWebSocket() {
 void WebUIManager::setupRoutes() {
     Logger.debug("=== WebUIManager: Setting up routes ===");
 
-    // Route for root / web page
-    server_->on("/", HTTP_GET, [](AsyncWebServerRequest* request) {
-        Logger.debug("Route called: GET /");
-        if (LittleFS.exists("/index.html")) {
-            File file = LittleFS.open("/index.html", "r");
-            Logger.debug("  /index.html exists, size: %d bytes", file.size());
-            file.close();
-        } else {
-            Logger.error("  /index.html NOT FOUND!");
-        }
-        request->send(LittleFS, "/index.html", "text/html", false);
-    });
+    // Root (/) is handled by the static handler in setupStaticFiles() via
+    // setDefaultFile("index.html"). AsyncFileResponse auto-detects .gz siblings
+    // and sets Content-Encoding: gzip transparently.
 
-    // Debug route to test connectivity
     server_->on("/test", HTTP_GET, [](AsyncWebServerRequest* request) {
-        Logger.debug("Route called: GET /test");
         request->send(200, "text/plain", "Server is working! IP: " + WiFi.localIP().toString());
     });
 
@@ -212,9 +208,11 @@ void WebUIManager::setupAPIEndpoints() {
     // NOTE: WiFi setup endpoints (/get-networks, /save-wifi, /factory-reset POST)
     // are handled by WiFiSetupManager library
 
-    // LED Configuration endpoints
+    // LED Configuration page — served by the Svelte SPA. We send the gzipped
+    // index.html and let the Svelte router show the LedConfig view based on
+    // window.location.pathname. AsyncFileResponse auto-detects the .gz sibling.
     server_->on("/led-config", HTTP_GET, [](AsyncWebServerRequest* request) {
-        request->send(LittleFS, "/led-config.html", "text/html");
+        request->send(LittleFS, "/web/index.html", "text/html");
     });
 
     server_->on("/get-led-config", HTTP_GET, [](AsyncWebServerRequest* request) {
@@ -258,13 +256,13 @@ void WebUIManager::setupAPIEndpoints() {
 
             Logger.info("Saved LED config: %d strips, %d LEDs per strip", numStrips, ledsPerStrip);
 
-            request->send(LittleFS, "/led-config-saved.html", "text/html");
+            request->send(200, "application/json", "{\"ok\":true}");
 
-            // Schedule restart
+            // Schedule restart — the Svelte client shows the "Restarting..." view.
             extern bool g_restartRequested;
             g_restartRequested = true;
         } else {
-            request->send(400, "text/plain", "Invalid LED configuration");
+            request->send(400, "application/json", "{\"ok\":false,\"error\":\"Invalid LED configuration\"}");
         }
     });
 
@@ -276,7 +274,7 @@ void WebUIManager::setupAPIEndpoints() {
         }
 
         Logger.info("LED state preferences cleared via web UI");
-        request->send(LittleFS, "/led-state-cleared.html", "text/html");
+        request->send(200, "application/json", "{\"ok\":true}");
     });
 
     // Legacy get-message endpoint (mostly unused)
@@ -287,8 +285,15 @@ void WebUIManager::setupAPIEndpoints() {
 }
 
 void WebUIManager::setupStaticFiles() {
-    // Serve static files from LittleFS
-    server_->serveStatic("/", LittleFS, "/");
+    // Svelte-built UI lives under /web/ and is gzipped. AsyncStaticWebHandler
+    // auto-detects .gz siblings, so a request for /app.js transparently serves
+    // /web/app.js.gz with Content-Encoding: gzip.
+    server_->serveStatic("/", LittleFS, "/web/").setDefaultFile("index.html");
+
+    // Cache the bundle aggressively — vite emits hash-free names but we control
+    // the rebuild via the firmware reflash, so a long max-age is safe.
+    // (Skipped: AsyncStaticWebHandler::setCacheControl would force a single value
+    //  for everything under /, including the standalone led-config pages.)
 }
 
 String WebUIManager::generateAnimationsResponse() {

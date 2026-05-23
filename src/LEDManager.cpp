@@ -44,6 +44,7 @@ LEDManager::LEDManager()
     , stateChangedTime_(0)
     , audioLevel_(0)
     , lastOTAProgress_(255)  // Invalid value to force first update
+    , otaMode_(false)
     , lastAnimationUpdate_(0)
 {
     // Initialize VU levels array
@@ -91,6 +92,13 @@ bool LEDManager::initialize() {
 
 void LEDManager::update() {
     if (!initialized_ || !isConfigValid() || !leds_) {
+        return;
+    }
+
+    // While OTA progress is being painted by showOTAProgress(), don't fight it
+    // by resetting brightness/animation each tick — that's what caused the
+    // strips to flicker between OTA brightness (150) and the user's saved value.
+    if (otaMode_) {
         return;
     }
 
@@ -166,6 +174,13 @@ void LEDManager::performStartupFadeIn() {
     // Ensure final brightness is exactly what was saved
     FastLED.setBrightness(brightness_);
     FastLED.show();
+}
+
+void LEDManager::setOTAMode(bool enabled) {
+    otaMode_ = enabled;
+    if (enabled) {
+        lastOTAProgress_ = 255;  // Force the next showOTAProgress() to paint.
+    }
 }
 
 void LEDManager::showOTAProgress(uint8_t progress) {
