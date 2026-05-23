@@ -1,7 +1,8 @@
 #pragma once
 
 #include <Arduino.h>
-#include <FastLED.h>
+#include "LedHelpers.h"
+#include "LedDriver.h"
 #include <Preferences.h>
 
 /**
@@ -262,10 +263,12 @@ private:
     bool otaMode_;
 
     Preferences preferences_;
-    
+
     // Animation timing
     unsigned long lastAnimationUpdate_;
-    
+
+    LedDriver driver_;
+
     // Private methods
     void loadConfiguration();
     void loadState();

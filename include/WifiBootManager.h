@@ -5,21 +5,21 @@
 #include <WiFiSetupBootUI.h>
 
 /**
- * @brief Network manager that wraps WiFi setup, boot UI, and theming
+ * @brief WiFi boot orchestrator that wraps WiFi setup, boot UI, and theming
  *
  * Encapsulates all network-related initialization including:
  * - WiFiSetupManager (handles WiFi connection/AP mode)
  * - WiFiSetupBootUI (displays connection status on screen)
  * - Theme configuration for consistent styling
  */
-class NetworkManager {
+class WifiBootManager {
 public:
-    NetworkManager();
-    ~NetworkManager();
+    WifiBootManager();
+    ~WifiBootManager();
 
     // Disable copy operations
-    NetworkManager(const NetworkManager&) = delete;
-    NetworkManager& operator=(const NetworkManager&) = delete;
+    WifiBootManager(const WifiBootManager&) = delete;
+    WifiBootManager& operator=(const WifiBootManager&) = delete;
 
     /**
      * @brief Initialize network manager and start WiFi
@@ -76,4 +76,4 @@ private:
 };
 
 // Global network manager instance
-extern NetworkManager* g_networkManager;
+extern WifiBootManager* g_wifiBootManager;

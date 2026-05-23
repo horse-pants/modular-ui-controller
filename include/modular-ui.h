@@ -89,14 +89,14 @@
 
 // =============================================================================
 
-#include <FastLED.h>
+#include "LedHelpers.h"
 #include <LovyanGFX.hpp>
 #include <lvgl.h>
 #include <lv_conf.h>
 #include "BrightnessSlider.h"
 #include "LEDManager.h"
 #include "WebUIManager.h"
-#include "NetworkManager.h"
+#include "WifiBootManager.h"
 
 // Web UI notification helper
 void updateWebUi();

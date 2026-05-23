@@ -17,7 +17,14 @@
       "Glob(//d/PlatformIO/Projects/ESP32WifiSetup/**)",
       "Grep(path://d/PlatformIO/Projects/ESP32WifiSetup/**)",
       "Bash(python:*)",
-      "Bash(rm:*)"
+      "Bash(rm:*)",
+      "Bash(gh release *)",
+      "Bash(pio pkg *)",
+      "Bash(git mv *)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Read(//d/PlatformIO/Projects/EverythingControl/**)",
+      "Read(//d/PlatformIO/Projects/EverythingControl-Peripheral/**)",
+      "WebFetch(domain:api.github.com)"
     ],
     "deny": [],
     "ask": []

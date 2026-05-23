@@ -6,7 +6,7 @@
 #include <Logger.h>
 #include "LEDManager.h"
 #include "ColourWheel.h"
-#include <FastLED.h>  // For CRGB color constants
+#include "LedHelpers.h"  // CRGB color constants
 
 // Global manager instances
 extern LEDManager* g_ledManager;

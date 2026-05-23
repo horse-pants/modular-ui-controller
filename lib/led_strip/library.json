@@ -1,0 +1,8 @@
+{
+  "name": "led_strip",
+  "version": "3.1.0",
+  "description": "Espressif led_strip driver (IDF 5 RMT + DMA). Vendored from espressif/idf-extra-components.",
+  "license": "Apache-2.0",
+  "frameworks": ["arduino", "espidf"],
+  "platforms": ["espressif32"]
+}

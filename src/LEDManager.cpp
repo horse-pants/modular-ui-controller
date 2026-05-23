@@ -54,6 +54,7 @@ LEDManager::LEDManager()
 }
 
 LEDManager::~LEDManager() {
+    driver_.end();
     deallocateLedArrays();
     preferences_.end();
 }
@@ -76,10 +77,12 @@ bool LEDManager::initialize() {
         return false;
     }
 
-    // Initialize FastLED
-    FastLED.addLeds<WS2812B, DATA_PIN, GRB>(leds_, totalLeds_);
-    FastLED.clear();
-    FastLED.setBrightness(0);
+    if (!driver_.begin(DATA_PIN, totalLeds_)) {
+        Logger.error("LedDriver init failed");
+        return false;
+    }
+    driver_.setBrightness(0);
+    driver_.clear();
 
     // Load saved LED state (brightness, mode, color, animation, etc.)
     loadState();
@@ -113,7 +116,7 @@ void LEDManager::update() {
         }
     }
 
-    FastLED.show();
+    driver_.show(leds_);
 
     // Check if state needs saving (debounced)
     saveStateIfNeeded();
@@ -142,19 +145,19 @@ void LEDManager::performStartupFadeIn() {
     // Determine what to show based on saved state
     if (showAnimation_) {
         // For animations: start animation immediately but fade in brightness
-        FastLED.setBrightness(0);
+        driver_.setBrightness(0);
         for (int i = 0; i <= targetBrightness; i++) {
             runAnimation();
-            FastLED.setBrightness(i);
-            FastLED.show();
+            driver_.setBrightness(i);
+            driver_.show(leds_);
             delay(delayPerStep);
         }
     } else if (whiteMode_) {
         // Fade in white
         fillColor(CRGB::White);
         for (int i = 0; i <= targetBrightness; i++) {
-            FastLED.setBrightness(i);
-            FastLED.show();
+            driver_.setBrightness(i);
+            driver_.show(leds_);
             delay(delayPerStep);
         }
     } else {
@@ -165,15 +168,15 @@ void LEDManager::performStartupFadeIn() {
         }
         fillColor(startupColor);
         for (int i = 0; i <= targetBrightness; i++) {
-            FastLED.setBrightness(i);
-            FastLED.show();
+            driver_.setBrightness(i);
+            driver_.show(leds_);
             delay(delayPerStep);
         }
     }
 
     // Ensure final brightness is exactly what was saved
-    FastLED.setBrightness(brightness_);
-    FastLED.show();
+    driver_.setBrightness(brightness_);
+    driver_.show(leds_);
 }
 
 void LEDManager::setOTAMode(bool enabled) {
@@ -231,8 +234,8 @@ void LEDManager::showOTAProgress(uint8_t progress) {
         }
     }
 
-    FastLED.setBrightness(150); // Full brightness for OTA progress
-    FastLED.show();
+    driver_.setBrightness(150); // Full brightness for OTA progress
+    driver_.show(leds_);
 }
 
 void LEDManager::fillColor(CRGB color) {
@@ -515,9 +518,9 @@ void LEDManager::deallocateLedArrays() {
 
 void LEDManager::updateBrightness() {
     if (vuMode_) {
-        FastLED.setBrightness(audioLevel_);
+        driver_.setBrightness(audioLevel_);
     } else {
-        FastLED.setBrightness(brightness_);
+        driver_.setBrightness(brightness_);
     }
 }
 

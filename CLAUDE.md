@@ -1,6 +1,6 @@
 # modular-ui-controller
 
-ESP32-S3 LED controller with a 320×480 LVGL touch UI, FastLED multi-strip animations with audio sync, and an AsyncWebServer + WebSocket web UI. Built on **Arduino** framework (NOT ESP-IDF).
+ESP32-S3 LED controller with a 320×480 LVGL touch UI, WS2812 multi-strip animations (driven by Espressif's `led_strip` component over RMT+DMA) with audio sync, and an AsyncWebServer + WebSocket web UI. Built on **Arduino** framework (NOT ESP-IDF).
 
 ---
 
@@ -30,7 +30,7 @@ This is the user's personal device. **Don't write NVS migration code, backwards-
 - **Framework**: Arduino (NOT ESP-IDF)
 - **Board**: ESP32-S3-DevKitC-1 (`platformio.ini` env `esp32-s3-devkitc-1`)
 - **Display**: 320×480 touch screen driven by LovyanGFX + LVGL v9
-- **LEDs**: FastLED multi-strip with audio-reactive animations
+- **LEDs**: WS2812 multi-strip via `led_strip` (IDF 5 RMT + DMA), audio-reactive animations
 - **Web UI**: AsyncWebServer + WebSocket (served from LittleFS)
 - **OTA**: via `ESP32WifiSetup` library
 
@@ -43,8 +43,8 @@ include/                — headers
   modular-ui.h          — UI theme constants (colors, spacing) — single source of truth
   lv_conf.h             — LVGL configuration
   UIManager.h           — top-level LVGL screen orchestrator
-  NetworkManager.h      — WiFi + boot UI wrapper around ESP32WifiSetup
-  LEDManager.h          — FastLED strip + animations
+  WifiBootManager.h     — WiFi + boot UI wrapper around ESP32WifiSetup (named to avoid collision with Arduino-ESP32 v3's NetworkManager class)
+  LEDManager.h          — LED strip + animations (LedDriver wraps led_strip; LedHelpers shims FastLED-style CRGB/CHSV API)
   WebUIManager.h        — AsyncWebServer routes + WebSocket
   AudioAnalyzer.h       — mic input → FFT → audio sync source
   ColourWheel.h, VuGraph.h, VuButton.h,
@@ -78,18 +78,18 @@ platformio.ini          — env: esp32-s3-devkitc-1
 ### Global managers (declared in `main.cpp`)
 
 ```cpp
-extern UIManager*      g_uiManager;      // LVGL UI
-extern NetworkManager* g_networkManager; // WiFi + boot UI wrapper
-extern LEDManager*     g_ledManager;     // LED strips + animations
+extern UIManager*        g_uiManager;        // LVGL UI
+extern WifiBootManager*  g_wifiBootManager;  // WiFi + boot UI wrapper
+extern LEDManager*       g_ledManager;       // LED strips + animations
 extern WebUIManager*   g_webUIManager;   // Web interface
 extern OTAManager*     g_otaManager;     // Firmware updates
 ```
 
 ### Main loop pattern
 
-`loop()` is a sequence of `Update()` calls — `lv_tick_inc`, `UIManager::update`, `NetworkManager::update`, `LEDManager::update`, `WebUIManager::update`, `OTAManager::loop`. Don't inline logic between them; put work on the manager being invoked.
+`loop()` is a sequence of `Update()` calls — `lv_tick_inc`, `UIManager::update`, `WifiBootManager::update`, `LEDManager::update`, `WebUIManager::update`, `OTAManager::loop`. Don't inline logic between them; put work on the manager being invoked.
 
-`setup()` initialises UI first, then network. If the network manager enters setup mode (no saved WiFi), the LED + full UI init are skipped — only the boot screen is up. Keep this branch shape; the boot UI assumes LEDs aren't initialised yet.
+`setup()` initialises UI first, then network. If `WifiBootManager` enters setup mode (no saved WiFi), the LED + full UI init are skipped — only the boot screen is up. Keep this branch shape; the boot UI assumes LEDs aren't initialised yet.
 
 ---
 

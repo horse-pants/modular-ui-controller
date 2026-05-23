@@ -1,12 +1,11 @@
-#include "NetworkManager.h"
+#include "WifiBootManager.h"
 #include "modular-ui.h"
 #include <Logger.h>
 #include <Preferences.h>
 
-// Global network manager instance
-NetworkManager* g_networkManager = nullptr;
+WifiBootManager* g_wifiBootManager = nullptr;
 
-NetworkManager::NetworkManager()
+WifiBootManager::WifiBootManager()
     : wifiManager_(nullptr)
     , bootUI_(nullptr)
     , initialized_(false)
@@ -14,7 +13,7 @@ NetworkManager::NetworkManager()
     initializeTheme();
 }
 
-NetworkManager::~NetworkManager() {
+WifiBootManager::~WifiBootManager() {
     if (bootUI_) {
         bootUI_->cleanup();
         delete bootUI_;
@@ -26,7 +25,7 @@ NetworkManager::~NetworkManager() {
     }
 }
 
-void NetworkManager::initializeTheme() {
+void WifiBootManager::initializeTheme() {
     // LVGL colors (from modular-ui.h)
     theme_.primaryColor = UI_COLOR_PRIMARY;
     theme_.backgroundColor = UI_COLOR_BACKGROUND;
@@ -45,7 +44,7 @@ void NetworkManager::initializeTheme() {
     theme_.webBorderColor = "#444444";
 }
 
-void NetworkManager::loadHostname() {
+void WifiBootManager::loadHostname() {
     if (!bootUI_) return;
 
     Preferences prefs;
@@ -58,7 +57,7 @@ void NetworkManager::loadHostname() {
     }
 }
 
-bool NetworkManager::initialize(const char* apName, const char* apPassword) {
+bool WifiBootManager::initialize(const char* apName, const char* apPassword) {
     if (initialized_) {
         return true;
     }
@@ -66,13 +65,13 @@ bool NetworkManager::initialize(const char* apName, const char* apPassword) {
     // Create boot UI
     bootUI_ = new WiFiSetupBootUI();
     if (!bootUI_) {
-        Logger.error("NetworkManager: Failed to create boot UI");
+        Logger.error("WifiBootManager: Failed to create boot UI");
         return false;
     }
 
     // Initialize boot UI with theme
     if (!bootUI_->initialize("MODULAR UI CONTROLLER", &theme_)) {
-        Logger.error("NetworkManager: Failed to initialize boot UI");
+        Logger.error("WifiBootManager: Failed to initialize boot UI");
         return false;
     }
     bootUI_->addText("ModularUI Controller Starting...\r\n");
@@ -86,7 +85,7 @@ bool NetworkManager::initialize(const char* apName, const char* apPassword) {
 
     wifiManager_ = new WiFiSetupManager(config);
     if (!wifiManager_) {
-        Logger.error("NetworkManager: Failed to create WiFi manager");
+        Logger.error("WifiBootManager: Failed to create WiFi manager");
         return false;
     }
 
@@ -105,27 +104,27 @@ bool NetworkManager::initialize(const char* apName, const char* apPassword) {
     return true;
 }
 
-void NetworkManager::update() {
+void WifiBootManager::update() {
     if (wifiManager_) {
         wifiManager_->update();
     }
 }
 
-bool NetworkManager::isInSetupMode() const {
+bool WifiBootManager::isInSetupMode() const {
     return wifiManager_ ? wifiManager_->isInSetupMode() : true;
 }
 
-AsyncWebServer* NetworkManager::getWebServer() {
+AsyncWebServer* WifiBootManager::getWebServer() {
     return wifiManager_ ? wifiManager_->getWebServer() : nullptr;
 }
 
-void NetworkManager::addBootText(const char* text) {
+void WifiBootManager::addBootText(const char* text) {
     if (bootUI_) {
         bootUI_->addText(text);
     }
 }
 
-void NetworkManager::cleanupBootUI() {
+void WifiBootManager::cleanupBootUI() {
     if (bootUI_) {
         bootUI_->cleanup();
         delete bootUI_;

@@ -16,7 +16,7 @@
 ## RAII
 
 - Constructors acquire resources; destructors release them
-- **Always unregister callbacks in destructors.** Any `[this]` lambda registered with LVGL / WebSocket / AsyncWebServer / FastLED must be removed in the destructor or the next event after teardown crashes.
+- **Always unregister callbacks in destructors.** Any `[this]` lambda registered with LVGL / WebSocket / AsyncWebServer must be removed in the destructor or the next event after teardown crashes.
 
 ## Strings
 
@@ -32,4 +32,4 @@
 
 ## Boot ordering
 
-`setup()` initialises in a specific order — UI screen first, then `NetworkManager`, then (only if not in setup mode) the full LVGL UI + `LEDManager`, then `WebUIManager`. Don't touch LEDs or full-UI widgets before `NetworkManager::initialize()` has decided whether we're in captive-portal mode.
+`setup()` initialises in a specific order — UI screen first, then `WifiBootManager`, then (only if not in setup mode) the full LVGL UI + `LEDManager`, then `WebUIManager`. Don't touch LEDs or full-UI widgets before `WifiBootManager::initialize()` has decided whether we're in captive-portal mode.
