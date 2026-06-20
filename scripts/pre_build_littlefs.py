@@ -15,6 +15,7 @@ for pattern in possible_paths:
         mklittlefs_bin = matches[0]
         break
 
+
 if mklittlefs_bin and os.path.exists(mklittlefs_bin):
     # Replace the mklittlefs command in PATH
     env.PrependENVPath("PATH", os.path.dirname(mklittlefs_bin))
