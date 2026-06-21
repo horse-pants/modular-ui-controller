@@ -1,16 +1,11 @@
 #include "VuGraph.h"
 #include "modular-ui.h"
 #include "ui.h"
+#include "AudioBus.h"
 
 VuGraph::VuGraph()
     : canvas_(nullptr)
     , initialized_(false)
-    , filters_{ExponentialFilter<int>(10, 0), ExponentialFilter<int>(10, 0), ExponentialFilter<int>(10, 0),
-               ExponentialFilter<int>(10, 0), ExponentialFilter<int>(10, 0), ExponentialFilter<int>(10, 0),
-               ExponentialFilter<int>(10, 0)}
-    , audioFilter_(10, 0)
-    , audio_(13, 21, 12) // Strobe pin ->13  RST pin ->21 Analog Pin ->12
-    , audioLevel_(0)
 {
     // Initialize arrays
     for (int i = 0; i < NUM_VU_CHANNELS; i++) {
@@ -32,12 +27,6 @@ VuGraph::~VuGraph() {
 VuGraph::VuGraph(VuGraph&& other) noexcept
     : canvas_(other.canvas_)
     , initialized_(other.initialized_)
-    , filters_{ExponentialFilter<int>(10, 0), ExponentialFilter<int>(10, 0), ExponentialFilter<int>(10, 0),
-               ExponentialFilter<int>(10, 0), ExponentialFilter<int>(10, 0), ExponentialFilter<int>(10, 0),
-               ExponentialFilter<int>(10, 0)}
-    , audioFilter_(10, 0)
-    , audio_(13, 21, 12)
-    , audioLevel_(other.audioLevel_)
 {
     for (int i = 0; i < NUM_VU_CHANNELS; i++) {
         for (int j = 0; j < SEGMENTS_PER_BAR; j++) {
@@ -58,7 +47,6 @@ VuGraph::VuGraph(VuGraph&& other) noexcept
 
     other.canvas_ = nullptr;
     other.initialized_ = false;
-    other.audioLevel_ = 0;
 }
 
 VuGraph& VuGraph::operator=(VuGraph&& other) noexcept {
@@ -69,9 +57,6 @@ VuGraph& VuGraph::operator=(VuGraph&& other) noexcept {
         // Move resources from other
         canvas_ = other.canvas_;
         initialized_ = other.initialized_;
-        audioFilter_ = ExponentialFilter<int>(10, 0); // Re-initialize
-        audio_ = Analyzer(13, 21, 12); // Re-initialize
-        audioLevel_ = other.audioLevel_;
 
         for (int i = 0; i < NUM_VU_CHANNELS; i++) {
             for (int j = 0; j < SEGMENTS_PER_BAR; j++) {
@@ -80,7 +65,6 @@ VuGraph& VuGraph::operator=(VuGraph&& other) noexcept {
             }
             peakSegments_[i] = other.peakSegments_[i];
             other.peakSegments_[i] = nullptr;
-            filters_[i] = ExponentialFilter<int>(10, 0); // Re-initialize filters
             vuValues_[i] = other.vuValues_[i];
             peakLevels_[i] = other.peakLevels_[i];
             peakTimers_[i] = other.peakTimers_[i];
@@ -94,7 +78,6 @@ VuGraph& VuGraph::operator=(VuGraph&& other) noexcept {
         // Reset the moved-from object
         other.canvas_ = nullptr;
         other.initialized_ = false;
-        other.audioLevel_ = 0;
     }
     return *this;
 }
@@ -175,8 +158,8 @@ bool VuGraph::initialize(lv_obj_t* parent) {
         // Create frequency labels
         createFrequencyLabels();
 
-        // Initialize audio analyzer
-        audio_.Init();
+        // Audio sampling lives in the audio task now (g_audioBus); nothing to
+        // initialise here — this widget only consumes frames.
 
         initialized_ = true;
         return true;
@@ -192,65 +175,36 @@ void VuGraph::update() {
         return;
     }
 
-    readFrequencies();
+    // Pull the freshest audio frame (published by the audio task) and redraw.
+    // No sampling, no filtering here — the frame is already filtered.
+    const AudioFrame frame = g_audioBus.latest();
+    for (int i = 0; i < NUM_VU_CHANNELS; i++) {
+        vuValues_[i] = frame.bands[i];
+    }
+
     updateVuBars();
-    getVuLevels();
 }
 
-int VuGraph::getOverallVolume() {
-    int totalVolume = 0;
-    for(int i = 0; i < NUM_VU_CHANNELS; i++){
-        totalVolume += filters_[i].Current();
+void VuGraph::centerContentIn(lv_coord_t areaW, lv_coord_t areaH) {
+    if (!canvas_) {
+        return;
     }
-    audioFilter_.Filter(totalVolume / NUM_VU_CHANNELS);
-    return audioFilter_.Current();
-}
 
-void VuGraph::getVuLevels5() {
-    int numStrips = g_ledManager ? g_ledManager->getNumStrips() : 0;
-    for (int i = 0; i < numStrips && i < 5; ++i) {
-        if(i == 0){
-            int maxVu = max(filters_[i].Current(), filters_[i + 1].Current());
-            vuValues_[i] = maxVu;
-        }
-        else if (i > 0 && i < 4){
-            vuValues_[i] = filters_[i + 1].Current();
-        }
-        else if (i == 4){
-            int maxVu = max(filters_[i + 1].Current(), filters_[i + 2].Current());
-            vuValues_[i] = maxVu;
-        }
-    }
-}
+    // Content bounding box in canvas-local coordinates (matches initialize() and
+    // createFrequencyLabels()): bars span [start_x, start_x + totalWidth] across
+    // and [0, BAR_TOTAL_HEIGHT + label row] down.
+    const int totalWidth = NUM_VU_CHANNELS * SEGMENT_WIDTH + (NUM_VU_CHANNELS - 1) * BAR_SPACING;
+    const int start_x = (LEFT_ALIGNMENT - totalWidth) / 2;
+    const int contentCenterX = start_x + totalWidth / 2;
+    const int contentCenterY = (BAR_TOTAL_HEIGHT + VU_LABEL_BAND_HEIGHT) / 2;
 
-void VuGraph::getVuLevels3() {
-    int numStrips = g_ledManager ? g_ledManager->getNumStrips() : 0;
-    for (int i = 0; i < numStrips && i < 3; ++i) {
-        if(i == 0){
-            int maxVu = max(filters_[0].Current(), filters_[1].Current());
-            vuValues_[i] = maxVu;
-        }
-        else if (i == 1){
-            int maxVu = max(filters_[2].Current(), filters_[3].Current());
-            maxVu = max(maxVu, filters_[4].Current());
-            vuValues_[i] = maxVu;
-        }
-        else if (i == 2){
-            int maxVu = max(filters_[5].Current(), filters_[6].Current());
-            vuValues_[i] = maxVu;
-        }
-    }
-}
-
-void VuGraph::getVuLevels() {
-    getVuLevels5();
-}
-
-int VuGraph::getVuValue(int channel) const {
-    if (channel >= 0 && channel < NUM_VU_CHANNELS) {
-        return vuValues_[channel];
-    }
-    return 0;
+    // Override the VU-tab sizing (PCT + centre): make the canvas span the region
+    // and shift it so the content's centre lands at the region's centre. The
+    // canvas background is transparent, so its overflow off-screen is invisible;
+    // the bars stay within the canvas bounds, so nothing is clipped.
+    lv_obj_set_align(canvas_, LV_ALIGN_TOP_LEFT);
+    lv_obj_set_size(canvas_, areaW, areaH);
+    lv_obj_set_pos(canvas_, areaW / 2 - contentCenterX, areaH / 2 - contentCenterY);
 }
 
 void VuGraph::updateVuBars() {
@@ -263,7 +217,7 @@ void VuGraph::updateVuBars() {
     const unsigned long PEAK_DECAY_TIME = 50;  // Decay one segment every 50ms
 
     for (int i = 0; i < NUM_VU_CHANNELS; i++) {
-        int level = filters_[i].Current();
+        int level = vuValues_[i];
 
         // Map level (0-255) to segment count (0-SEGMENTS_PER_BAR)
         int litSegments = map(level, 0, 255, 0, SEGMENTS_PER_BAR);
@@ -312,31 +266,6 @@ void VuGraph::updateVuBars() {
     }
 }
 
-void VuGraph::readFrequencies() {
-    if (!initialized_) {
-        return;
-    }
-    
-    // Read audio data and update filters
-    int freqVal[7];
-    audio_.ReadFreq(freqVal);
-
-    for(int i = 0; i < NUM_VU_CHANNELS; i++){
-        int mappedValue = map(freqVal[i], 0, 4096, 0, 255);
-        filters_[i].Filter(mappedValue);
-        // IMPORTANT: Copy filtered values to vuValues_ array for LED animations
-        vuValues_[i] = filters_[i].Current();
-    } 
-
-    audioLevel_ = getOverallVolume();
-    
-    // Update LEDManager with new VU levels
-    extern LEDManager* g_ledManager;
-    if (g_ledManager) {
-        g_ledManager->updateVuLevels(vuValues_, audioLevel_);
-    }
-}
-
 void VuGraph::cleanup() {
     for (int i = 0; i < NUM_VU_CHANNELS; i++) {
         for (int j = 0; j < SEGMENTS_PER_BAR; j++) {
@@ -361,7 +290,6 @@ void VuGraph::cleanup() {
     }
 
     initialized_ = false;
-    audioLevel_ = 0;
 }
 
 void VuGraph::createFrequencyLabels() {

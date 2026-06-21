@@ -134,7 +134,7 @@
     <nav>
       <a href="/update">Update</a>
       <a href="/setup">WiFi</a>
-      <a href="/led-config" on:click={goToLedConfig}>LEDs</a>
+      <a href="/led-config" on:click={goToLedConfig}>Settings</a>
       <a href="/logs">Logs</a>
     </nav>
   </main>

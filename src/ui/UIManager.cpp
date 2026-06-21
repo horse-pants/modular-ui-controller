@@ -2,6 +2,7 @@
 #include "modular-ui.h"
 #include "ui.h"
 #include <memory>
+#include <Preferences.h>
 #include <Logger.h>
 
 // Global instance definitions
@@ -12,6 +13,15 @@ EffectsList* g_effectsList = nullptr;
 WhiteButton* g_whiteButton = nullptr;
 VuButton* g_vuButton = nullptr;
 VuGraph* g_vuGraph = nullptr;
+
+// LVGL v9 pulls elapsed time from this callback (replaces v8's compile-time
+// LV_TICK_CUSTOM), so the tick source is task-agnostic and no longer depends on
+// loop() calling lv_tick_inc(). Wrapped rather than passing millis() directly
+// because millis() returns `unsigned long`, not `uint32_t`, and the function
+// pointer types must match exactly.
+static uint32_t lvglTickCallback() {
+    return millis();
+}
 
 // Static style definitions
 lv_style_t UIManager::stylePanelMain_;
@@ -173,6 +183,11 @@ void displayFlush(lv_display_t* disp, const lv_area_t* area, uint8_t* px_map) {
     lv_display_flush_ready(disp);
 }
 
+// Last screen-touch timestamp, used to trigger the idle screensaver. Written
+// here (render task, inside lv_timer_handler) and read in UIManager::update on
+// the same task — no synchronisation needed.
+static uint32_t s_lastTouchMs = 0;
+
 // Touch read callback
 void touchpadRead(lv_indev_t* indev_driver, lv_indev_data_t* data) {
     uint16_t touchX, touchY;
@@ -184,6 +199,7 @@ void touchpadRead(lv_indev_t* indev_driver, lv_indev_data_t* data) {
         data->state = LV_INDEV_STATE_PRESSED;
         data->point.x = touchX;
         data->point.y = touchY;
+        s_lastTouchMs = millis();  // any screen touch resets the idle timer
     }
 }
 
@@ -194,6 +210,7 @@ UIManager::UIManager()
     , whiteButton_(nullptr)
     , vuButton_(nullptr)
     , vuGraph_(nullptr)
+    , audioVisualiser_(nullptr)
     , tabview_(nullptr)
     , tab1_(nullptr)
     , tab2_(nullptr)
@@ -205,11 +222,27 @@ UIManager::UIManager()
     , otaProgressChanged_(false)
     , initialized_(false)
     , screenInitialized_(false)
+    , screensaverEnabled_(true)
+    , screensaverIdleMs_(30000)
+    , uiCommandQueue_(nullptr)
+    , renderTaskHandle_(nullptr)
 {
+    // Created up front so web handlers can post before the full UI is built.
+    uiCommandQueue_ = xQueueCreate(16, sizeof(UiCommand));
 }
 
 UIManager::~UIManager() {
+    // Stop the render task before tearing down any lv_* objects, or it could
+    // touch freed widgets mid-flush.
+    if (renderTaskHandle_) {
+        vTaskDelete(renderTaskHandle_);
+        renderTaskHandle_ = nullptr;
+    }
     cleanup();
+    if (uiCommandQueue_) {
+        vQueueDelete(uiCommandQueue_);
+        uiCommandQueue_ = nullptr;
+    }
 }
 
 UIManager::UIManager(UIManager&& other) noexcept
@@ -219,6 +252,7 @@ UIManager::UIManager(UIManager&& other) noexcept
     , whiteButton_(std::move(other.whiteButton_))
     , vuButton_(std::move(other.vuButton_))
     , vuGraph_(std::move(other.vuGraph_))
+    , audioVisualiser_(std::move(other.audioVisualiser_))
     , tabview_(other.tabview_)
     , tab1_(other.tab1_)
     , tab2_(other.tab2_)
@@ -230,8 +264,16 @@ UIManager::UIManager(UIManager&& other) noexcept
     , otaProgressChanged_(other.otaProgressChanged_)
     , initialized_(other.initialized_)
     , screenInitialized_(other.screenInitialized_)
+    , screensaverEnabled_(other.screensaverEnabled_)
+    , screensaverIdleMs_(other.screensaverIdleMs_)
+    , uiCommandQueue_(other.uiCommandQueue_)
+    , renderTaskHandle_(other.renderTaskHandle_)
 {
-    // Reset the moved-from object
+    // Reset the moved-from object. NOTE: a running render task captured the
+    // original `this`; moving a UIManager while its task runs would dangle.
+    // UIManager is a never-moved global in practice, so this is theoretical.
+    other.uiCommandQueue_ = nullptr;
+    other.renderTaskHandle_ = nullptr;
     other.tabview_ = nullptr;
     other.tab1_ = nullptr;
     other.tab2_ = nullptr;
@@ -248,15 +290,26 @@ UIManager::UIManager(UIManager&& other) noexcept
 UIManager& UIManager::operator=(UIManager&& other) noexcept {
     if (this != &other) {
         // Clean up current resources
+        if (renderTaskHandle_) {
+            vTaskDelete(renderTaskHandle_);
+        }
         cleanup();
+        if (uiCommandQueue_) {
+            vQueueDelete(uiCommandQueue_);
+        }
 
         // Move resources from other
+        uiCommandQueue_ = other.uiCommandQueue_;
+        other.uiCommandQueue_ = nullptr;
+        renderTaskHandle_ = other.renderTaskHandle_;
+        other.renderTaskHandle_ = nullptr;
         brightnessSlider_ = std::move(other.brightnessSlider_);
         colourWheel_ = std::move(other.colourWheel_);
         effectsList_ = std::move(other.effectsList_);
         whiteButton_ = std::move(other.whiteButton_);
         vuButton_ = std::move(other.vuButton_);
         vuGraph_ = std::move(other.vuGraph_);
+        audioVisualiser_ = std::move(other.audioVisualiser_);
         tabview_ = other.tabview_;
         tab1_ = other.tab1_;
         tab2_ = other.tab2_;
@@ -268,6 +321,8 @@ UIManager& UIManager::operator=(UIManager&& other) noexcept {
         otaProgressChanged_ = other.otaProgressChanged_;
         initialized_ = other.initialized_;
         screenInitialized_ = other.screenInitialized_;
+        screensaverEnabled_ = other.screensaverEnabled_;
+        screensaverIdleMs_ = other.screensaverIdleMs_;
 
         // Reset the moved-from object
         other.tabview_ = nullptr;
@@ -294,7 +349,10 @@ bool UIManager::initializeScreen() {
         // Initialize LovyanGFX
         lcd.init();
         lv_init();
-        
+
+        // Task-agnostic tick source (no more lv_tick_inc in loop())
+        lv_tick_set_cb(lvglTickCallback);
+
         lcd.setRotation(2);
         
         setupDisplayDriver();
@@ -346,9 +404,19 @@ void UIManager::update() {
         return;
     }
 
+    // Apply any UI mutations queued from other tasks (web handlers) before we
+    // touch LVGL, so all lv_* mutation originates on this single task.
+    drainUiCommands();
+
     // Handle OTA screen updates (must be in main loop for LVGL thread safety)
     if (otaProgressChanged_) {
         otaProgressChanged_ = false;
+
+        // The OTA screen lives under the top-layer screensaver — dismiss the
+        // screensaver so the progress is visible.
+        if (otaScreenActive_ && audioVisualiser_ && audioVisualiser_->isActive()) {
+            audioVisualiser_->hide();
+        }
 
         if (otaScreenActive_ && !otaScreen_) {
             // Create OTA screen
@@ -401,13 +469,131 @@ void UIManager::update() {
         }
     }
 
-    // Update VU graph if it exists
-    if (vuGraph_) {
+    // Idle screensaver: after screensaverIdleMs_ with no screen touch, reveal the
+    // full-screen visualiser; while it's up, draw it (and skip the VU meter
+    // underneath, which is covered). A tap dismisses it (handled by the overlay).
+    // The feature can be disabled from the web Settings page (screensaverEnabled_).
+    if (audioVisualiser_) {
+        if (audioVisualiser_->isActive()) {
+            // Live-dismiss if it was disabled from the web while showing.
+            if (!screensaverEnabled_) {
+                audioVisualiser_->hide();
+            } else {
+                audioVisualiser_->update();
+            }
+        } else {
+            if (vuGraph_) {
+                vuGraph_->update();
+            }
+            // Don't kick in when disabled, or over the OTA progress screen.
+            if (screensaverEnabled_ && !otaScreenActive_ &&
+                (millis() - s_lastTouchMs) > screensaverIdleMs_) {
+                audioVisualiser_->show();
+            }
+        }
+    } else if (vuGraph_) {
         vuGraph_->update();
     }
 
     // Process LVGL tasks
     lv_timer_handler();
+}
+
+void UIManager::postUiCommand(const UiCommand& cmd) {
+    if (!uiCommandQueue_) {
+        return;
+    }
+    // Non-blocking: never stall the AsyncTCP task. Drop on overflow.
+    xQueueSend(uiCommandQueue_, &cmd, 0);
+}
+
+void UIManager::drainUiCommands() {
+    if (!uiCommandQueue_) {
+        return;
+    }
+    UiCommand cmd;
+    while (xQueueReceive(uiCommandQueue_, &cmd, 0) == pdTRUE) {
+        applyUiCommand(cmd);
+    }
+}
+
+void UIManager::applyUiCommand(const UiCommand& cmd) {
+    switch (cmd.type) {
+        case UiCommandType::SetVu:
+            setVuState(cmd.boolValue);
+            updateWebUi();
+            break;
+
+        case UiCommandType::SetWhite:
+            setWhiteState(cmd.boolValue);
+            updateWebUi();
+            break;
+
+        case UiCommandType::SetBrightness:
+            if (g_brightnessSlider) {
+                // Trigger callback to update global state and notify clients
+                g_brightnessSlider->setBrightness(cmd.intValue, true, true);
+            } else {
+                if (g_ledManager) {
+                    g_ledManager->setBrightness(cmd.intValue);
+                }
+                updateWebUi();
+            }
+            break;
+
+        case UiCommandType::SetAnimation:
+            if (cmd.boolValue) {
+                setAnimation(cmd.intValue);
+            }
+            setAnimationState(cmd.boolValue);
+            updateWebUi();
+            break;
+
+        case UiCommandType::SetColour:
+            if (g_colourWheel) {
+                g_colourWheel->setColor(String(cmd.colour));
+            }
+            break;
+
+        case UiCommandType::None:
+        default:
+            break;
+    }
+}
+
+void UIManager::renderTaskTrampoline(void* arg) {
+    UIManager* self = static_cast<UIManager*>(arg);
+    // ~200 Hz cap: smooth UI + keeps the VU read (still in update() until step 4)
+    // responsive, while yielding the core to loopTask (LED/web/OTA) each pass.
+    const TickType_t period = pdMS_TO_TICKS(5);
+    for (;;) {
+        self->update();
+        vTaskDelay(period);
+    }
+}
+
+void UIManager::startRenderTask() {
+    if (renderTaskHandle_) {
+        return;  // already running
+    }
+    // Stack in BYTES (ESP-IDF FreeRTOS). LVGL render + LovyanGFX flush + the VU
+    // read fit comfortably under the old 8 KB loopTask budget; 10 KB gives
+    // headroom — watch uxTaskGetStackHighWaterMark on long runs.
+    // Priority 2 > Arduino loopTask (1) so the render task preempts it. Core 1.
+    BaseType_t ok = xTaskCreatePinnedToCore(
+        renderTaskTrampoline,
+        "lvgl_render",
+        10240,
+        this,
+        2,
+        &renderTaskHandle_,
+        1);
+    if (ok != pdPASS) {
+        renderTaskHandle_ = nullptr;
+        Logger.error("Failed to create LVGL render task");
+    } else {
+        Logger.info("LVGL render task started (core 1, prio 2)");
+    }
 }
 
 void UIManager::applyCurrentColor() {
@@ -777,7 +963,50 @@ bool UIManager::initializeComponents() {
         return false;
     }
 
+    // ==========================================================================
+    // AUDIO VISUALISER — full-screen idle screensaver on the top layer (not a
+    // tab). Manages g_audioVisualiser itself. The canvas (PSRAM) is allocated
+    // lazily the first time it's shown.
+    // ==========================================================================
+    audioVisualiser_.reset(new AudioVisualiser());
+    if (audioVisualiser_ && !audioVisualiser_->initialize(lv_layer_top())) {
+        return false;
+    }
+
+    // Apply the saved screensaver preferences (enable + idle timeout).
+    loadScreensaverConfig();
+
     return true;
+}
+
+void UIManager::loadScreensaverConfig() {
+    Preferences prefs;
+    prefs.begin("ui-settings", true);  // read-only
+    screensaverEnabled_ = prefs.getBool("scrn_en", true);
+    uint32_t idleSec = prefs.getUInt("scrn_sec", 30);
+    prefs.end();
+
+    if (idleSec < 5) idleSec = 5;  // clamp to a sane minimum
+    screensaverIdleMs_ = idleSec * 1000;
+
+    Logger.info("Screensaver: %s, idle %us",
+                screensaverEnabled_ ? "enabled" : "disabled", (unsigned)idleSec);
+}
+
+void UIManager::setScreensaverConfig(bool enabled, uint32_t idleMs) {
+    if (idleMs < 5000) idleMs = 5000;  // clamp to a sane minimum
+    screensaverEnabled_ = enabled;
+    screensaverIdleMs_ = idleMs;
+
+    // Persist (NVS stores the timeout in whole seconds).
+    Preferences prefs;
+    prefs.begin("ui-settings", false);
+    prefs.putBool("scrn_en", enabled);
+    prefs.putUInt("scrn_sec", idleMs / 1000);
+    prefs.end();
+
+    Logger.info("Screensaver config saved: %s, idle %ums",
+                enabled ? "enabled" : "disabled", (unsigned)idleMs);
 }
 
 void UIManager::setupDisplayDriver() {
@@ -807,13 +1036,17 @@ void UIManager::cleanup() {
     g_vuButton = nullptr;
     g_vuGraph = nullptr;
 
-    // Smart pointers will automatically clean up their resources
+    // Smart pointers will automatically clean up their resources.
+    // audioVisualiser_ nulls its own g_audioVisualiser and frees its canvas
+    // buffer in its destructor; reset it before deleting the tabview so its
+    // container is gone before the parent tab is.
     brightnessSlider_.reset();
     colourWheel_.reset();
     effectsList_.reset();
     whiteButton_.reset();
     vuButton_.reset();
     vuGraph_.reset();
+    audioVisualiser_.reset();
 
     // Clean up LVGL objects
     if (tabview_) {

@@ -174,14 +174,7 @@ public:
      * @brief Fill all LEDs with white
      */
     void fillWhite();
-    
-    /**
-     * @brief Update VU levels for animations (called from VuGraph)
-     * @param vuLevels Array of 7 VU levels
-     * @param audioLevel Overall audio level
-     */
-    void updateVuLevels(const int* vuLevels, int audioLevel);
-    
+
     /**
      * @brief Get VU level for specific strip
      * @param strip Strip index

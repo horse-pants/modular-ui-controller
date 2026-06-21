@@ -3,6 +3,7 @@
 #include "WifiBootManager.h"
 #include "LEDManager.h"
 #include "WebUIManager.h"
+#include "AudioTask.h"
 #include <OTAManager.h>
 #include <Logger.h>
 
@@ -25,6 +26,13 @@ void setup()
     // Initialize logger early
     Logger.begin(200, true, true);
     Logger.info("ModularUI Controller Starting...");
+
+    // PSRAM diagnostic — the full-screen visualiser canvas needs it. If found=0
+    // here, the platformio.ini memory_type doesn't match the module's PSRAM.
+    Logger.info("PSRAM: found=%d, size=%u bytes, free=%u bytes",
+                psramFound() ? 1 : 0,
+                (unsigned)ESP.getPsramSize(),
+                (unsigned)ESP.getFreePsram());
 
     // Initialize UI Manager (screen only at first)
     g_uiManager = new UIManager();
@@ -52,30 +60,52 @@ void setup()
         g_ledManager->performStartupFadeIn();
         g_uiManager->syncWithLEDState();
     }
+
+    // Hand LVGL ownership to the render task — only in normal mode, and only
+    // after all startup lv_* (syncWithLEDState) has completed so nothing races
+    // the task during boot. In setup mode the boot UI keeps driving LVGL on the
+    // loop, so no render task is created.
+    if (!g_wifiBootManager->isInSetupMode()) {
+        // Audio task first so frames are flowing before the render task and LED
+        // animations start pulling from g_audioBus.
+        startAudioTask();
+        g_uiManager->startRenderTask();
+    }
 }
 
 void loop()
 {
-    // LVGL tick updates
-    static uint32_t lastTick = 0;
-    uint32_t currentMillis = millis();
-    lv_tick_inc(currentMillis - lastTick);
-    lastTick = currentMillis;
+    // LVGL tick comes from lv_tick_set_cb(millis) registered in
+    // UIManager::initializeScreen() — no manual lv_tick_inc here.
 
-    // Update managers
-    if (g_uiManager) {
-        g_uiManager->update();
-        if (g_wifiBootManager && g_wifiBootManager->isInSetupMode()) {
+    // LVGL ownership:
+    //  - Normal mode: the render task owns all lv_* (started at end of setup).
+    //    The loop must NOT touch LVGL here — it only runs the non-UI managers.
+    //  - Setup mode / no UI manager: no render task, so drive LVGL on the loop
+    //    as before to keep the boot UI alive.
+    if (!(g_uiManager && g_uiManager->isRenderTaskRunning())) {
+        if (g_uiManager) {
+            g_uiManager->update();
+            if (g_wifiBootManager && g_wifiBootManager->isInSetupMode()) {
+                lv_timer_handler();
+            }
+        } else {
             lv_timer_handler();
         }
-    } else {
-        lv_timer_handler();
     }
 
     if (g_wifiBootManager) g_wifiBootManager->update();
     if (g_ledManager) g_ledManager->update();
     if (g_webUIManager) g_webUIManager->update();
     if (g_otaManager) g_otaManager->loop();
+
+    // With the render task owning LVGL, the loop no longer blocks on the flush.
+    // LEDManager::update()'s driver_.show() paces us when strips are configured,
+    // but yield explicitly so loopTask never 100%-spins core 1 (starving IDLE1)
+    // when LEDs are absent. 1 ms cap is far above any LED frame rate.
+    if (g_uiManager && g_uiManager->isRenderTaskRunning()) {
+        vTaskDelay(1);
+    }
 
     // Handle restart requests
     if (g_restartRequested && g_restartTime == 0) {

@@ -11,6 +11,13 @@
   let errorMessage = '';
   let restartCountdown = 0;
 
+  // Screensaver settings (applied live, no restart).
+  let screensaverEnabled = true;
+  let screensaverTimeout = 30;
+  let settingsLoaded = false;
+  let settingsStatus = 'idle';   // 'idle' | 'saving' | 'saved' | 'error'
+  let settingsError = '';
+
   $: total = (parseInt(numStrips) || 0) * (parseInt(ledsPerStrip) || 0);
 
   onMount(async () => {
@@ -26,7 +33,43 @@
     } finally {
       loaded = true;
     }
+
+    try {
+      const r = await fetch('/get-settings');
+      const data = await r.json();
+      screensaverEnabled = !!data.screensaverEnabled;
+      if (typeof data.screensaverTimeoutSec === 'number') {
+        screensaverTimeout = data.screensaverTimeoutSec;
+      }
+    } catch (e) {
+      console.error('Failed to load settings:', e);
+    } finally {
+      settingsLoaded = true;
+    }
   });
+
+  async function saveSettings() {
+    settingsStatus = 'saving';
+    settingsError = '';
+    try {
+      const body = new URLSearchParams();
+      body.set('screensaver_enabled', screensaverEnabled ? 'true' : 'false');
+      body.set('screensaver_timeout_sec', String(parseInt(screensaverTimeout) || 30));
+
+      const r = await fetch('/save-settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+
+      settingsStatus = 'saved';
+      setTimeout(() => { if (settingsStatus === 'saved') settingsStatus = 'idle'; }, 2000);
+    } catch (e) {
+      settingsStatus = 'error';
+      settingsError = String(e.message || e);
+    }
+  }
 
   async function save() {
     if (!numStrips || !ledsPerStrip) return;
@@ -99,18 +142,62 @@
       <p>Saved LED preferences have been deleted.</p>
       <p>On next boot the device will fade in to red (first-boot behaviour).</p>
       <a class="back-pill" href="/led-config" on:click|preventDefault={() => { status = 'idle'; }}>
-        &larr; Back to LED Config
+        &larr; Back to Settings
       </a>
     </div>
   </main>
 {:else}
   <main>
     <header>
-      <h1>LED Configuration</h1>
+      <h1>Settings</h1>
       <slot name="theme-toggle" />
     </header>
 
     <section class="card">
+      <h3 class="section-title">Idle Screensaver</h3>
+      <p class="text-muted section-desc">
+        Show the full-screen VU meter on the device when the screen has been idle.
+      </p>
+
+      {#if !settingsLoaded}
+        <p class="text-muted">Loading…</p>
+      {:else}
+        <div class="control row-control">
+          <label for="screensaver_enabled">Enabled</label>
+          <button id="screensaver_enabled"
+                  type="button"
+                  class="btn toggle"
+                  class:active={screensaverEnabled}
+                  on:click={() => (screensaverEnabled = !screensaverEnabled)}>
+            {screensaverEnabled ? 'On' : 'Off'}
+          </button>
+        </div>
+
+        {#if screensaverEnabled}
+          <div class="control">
+            <label for="screensaver_timeout">Idle Timeout (seconds)</label>
+            <input id="screensaver_timeout" type="number" min="5" max="600"
+                   bind:value={screensaverTimeout}>
+          </div>
+        {/if}
+
+        <button type="button"
+                class="btn btn-primary"
+                disabled={settingsStatus === 'saving'}
+                on:click={saveSettings}>
+          {settingsStatus === 'saving' ? 'Saving…' : 'Save'}
+        </button>
+
+        {#if settingsStatus === 'saved'}
+          <p class="ok">Saved &#10003;</p>
+        {:else if settingsStatus === 'error'}
+          <p class="error">Error: {settingsError}</p>
+        {/if}
+      {/if}
+    </section>
+
+    <section class="card">
+      <h3 class="section-title">LED Strips</h3>
       {#if !loaded}
         <p class="text-muted">Loading…</p>
       {:else}
@@ -196,6 +283,41 @@
     flex-direction: column;
     gap: 0.45rem;
     margin-bottom: 1rem;
+  }
+
+  .section-title {
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 0.35rem;
+  }
+
+  .section-desc {
+    font-size: 0.85rem;
+    margin-bottom: 1.1rem;
+  }
+
+  /* Label beside its control (used for the on/off toggle row). */
+  .row-control {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .row-control label {
+    margin-bottom: 0;
+  }
+
+  /* Override the component-wide `.btn { width: 100% }` so the toggle stays
+     compact beside its label. */
+  .btn.toggle {
+    width: auto;
+    min-width: 5.5rem;
+  }
+
+  .ok {
+    color: var(--success);
+    margin-top: 0.75rem;
+    font-size: 0.85rem;
   }
 
   .total {

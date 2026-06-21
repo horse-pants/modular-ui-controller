@@ -7,6 +7,7 @@
 #include "LEDManager.h"
 #include "ColourWheel.h"
 #include "LedHelpers.h"  // CRGB color constants
+#include "AudioTask.h"   // pause/resume audio task around OTA
 
 // Global manager instances
 extern LEDManager* g_ledManager;
@@ -63,8 +64,12 @@ bool WebUIManager::initialize() {
             // bar flickers the whole way.
             if (g_ledManager) {
                 g_ledManager->setAnimationEnabled(false);
-                g_ledManager->setOTAMode(true);
+                g_ledManager->setOTAMode(true);  // stops LEDManager reading g_audioBus
             }
+            // Suspend the core-0 audio task: its ADC2 (WiFi-shared) reads contend
+            // with the OTA traffic and help starve IDLE0 (task watchdog). Done
+            // after setOTAMode so no one is consuming audio frames.
+            pauseAudioTask();
         });
 
         // Set LED progress callback
@@ -101,6 +106,8 @@ bool WebUIManager::initialize() {
                     }
                     g_ledManager->setOTAMode(false);
                 }
+                // OTA failed (no reboot) — bring the audio task back.
+                resumeAudioTask();
             }
             // On success the device restarts, so the flag resets implicitly.
         });
@@ -266,6 +273,41 @@ void WebUIManager::setupAPIEndpoints() {
         }
     });
 
+    // Settings: idle screensaver (enable + idle timeout). Applied live, no restart.
+    server_->on("/get-settings", HTTP_GET, [](AsyncWebServerRequest* request) {
+        bool enabled = g_uiManager ? g_uiManager->isScreensaverEnabled() : true;
+        uint32_t idleSec = g_uiManager ? g_uiManager->getScreensaverIdleMs() / 1000 : 30;
+
+        String json = "{";
+        json += "\"screensaverEnabled\":" + String(enabled ? "true" : "false") + ",";
+        json += "\"screensaverTimeoutSec\":" + String(idleSec);
+        json += "}";
+
+        request->send(200, "application/json", json);
+    });
+
+    server_->on("/save-settings", HTTP_POST, [](AsyncWebServerRequest* request) {
+        if (!g_uiManager) {
+            request->send(503, "application/json", "{\"ok\":false,\"error\":\"UI not ready\"}");
+            return;
+        }
+
+        // Default to the current values so a partial form doesn't clobber them.
+        bool enabled = g_uiManager->isScreensaverEnabled();
+        uint32_t idleSec = g_uiManager->getScreensaverIdleMs() / 1000;
+
+        if (request->hasParam("screensaver_enabled", true)) {
+            String v = request->getParam("screensaver_enabled", true)->value();
+            enabled = (v == "true" || v == "1" || v == "on");
+        }
+        if (request->hasParam("screensaver_timeout_sec", true)) {
+            idleSec = request->getParam("screensaver_timeout_sec", true)->value().toInt();
+        }
+
+        g_uiManager->setScreensaverConfig(enabled, idleSec * 1000);
+        request->send(200, "application/json", "{\"ok\":true}");
+    });
+
     // Clear saved LED state (for testing first-boot experience)
     server_->on("/clear-led-state", HTTP_POST, [](AsyncWebServerRequest* request) {
         extern LEDManager* g_ledManager;
@@ -393,49 +435,55 @@ void WebUIManager::handleConnectMessage() {
     webSocket_.textAll(generateStateResponse());
 }
 
+// These handlers run on the AsyncTCP task. They must NOT touch LVGL directly —
+// instead they post a POD command to the UI owner, which applies it on the task
+// that owns lv_* (see UIManager::applyUiCommand). notifyClients() is issued
+// there too, after the state has actually changed.
 void WebUIManager::handleVuMessage(const JsonDocument& request) {
     if (g_uiManager) {
-        g_uiManager->setVuState((bool)request["value"]);
+        UiCommand cmd;
+        cmd.type = UiCommandType::SetVu;
+        cmd.boolValue = (bool)request["value"];
+        g_uiManager->postUiCommand(cmd);
     }
-    notifyClients();
 }
 
 void WebUIManager::handleWhiteMessage(const JsonDocument& request) {
     if (g_uiManager) {
-        g_uiManager->setWhiteState((bool)request["value"]);
+        UiCommand cmd;
+        cmd.type = UiCommandType::SetWhite;
+        cmd.boolValue = (bool)request["value"];
+        g_uiManager->postUiCommand(cmd);
     }
-    notifyClients();
 }
 
 void WebUIManager::handleBrightnessMessage(const JsonDocument& request) {
-    int newBrightness = (int)request["value"];
-    if (g_brightnessSlider) {
-        // Trigger callback to update global state and notify other clients
-        g_brightnessSlider->setBrightness(newBrightness, true, true);
-    } else {
-        if (g_ledManager) {
-            g_ledManager->setBrightness(newBrightness);
-        }
-        notifyClients();
+    if (g_uiManager) {
+        UiCommand cmd;
+        cmd.type = UiCommandType::SetBrightness;
+        cmd.intValue = (int)request["value"];
+        g_uiManager->postUiCommand(cmd);
     }
 }
 
 void WebUIManager::handleAnimationMessage(const JsonDocument& request) {
-    bool runAnimation = (bool)request["value"];
     if (g_uiManager) {
-        if (runAnimation) {
-            g_uiManager->setAnimation((int)request["animation"]);
-        }
-        g_uiManager->setAnimationState(runAnimation);
+        UiCommand cmd;
+        cmd.type = UiCommandType::SetAnimation;
+        cmd.boolValue = (bool)request["value"];
+        cmd.intValue = (int)request["animation"];
+        g_uiManager->postUiCommand(cmd);
     }
-    notifyClients();
 }
 
 void WebUIManager::handleColorMessage(const JsonDocument& request) {
-    if (g_colourWheel) {
+    if (g_uiManager) {
         String hexValue = (const char*)request["value"];
         Logger.debug("Hex value: %s", hexValue.c_str());
-        g_colourWheel->setColor(hexValue);
+        UiCommand cmd;
+        cmd.type = UiCommandType::SetColour;
+        snprintf(cmd.colour, sizeof(cmd.colour), "%s", hexValue.c_str());
+        g_uiManager->postUiCommand(cmd);
     }
 }
 

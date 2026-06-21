@@ -1,5 +1,6 @@
 #include "LEDManager.h"
 #include "UIManager.h"
+#include "AudioBus.h"
 #include <Logger.h>
 
 // Global LED manager instance
@@ -104,6 +105,14 @@ void LEDManager::update() {
     if (otaMode_) {
         return;
     }
+
+    // Pull the latest audio snapshot (published by the audio task) — replaces the
+    // old VuGraph push. Animations read vuLevels_/audioLevel_ exactly as before.
+    const AudioFrame audio = g_audioBus.latest();
+    for (int i = 0; i < 7; i++) {
+        vuLevels_[i] = audio.bands[i];
+    }
+    audioLevel_ = audio.overall;
 
     updateBrightness();
 
@@ -250,13 +259,6 @@ void LEDManager::fillColor(CRGB color) {
 
 void LEDManager::fillWhite() {
     fillColor(CRGB(255, 255, 255));
-}
-
-void LEDManager::updateVuLevels(const int* vuLevels, int level) {
-    for (int i = 0; i < 7; i++) {
-        vuLevels_[i] = vuLevels[i];
-    }
-    audioLevel_ = level;
 }
 
 int LEDManager::getVuForStrip(int strip) const {

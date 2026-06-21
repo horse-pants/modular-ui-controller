@@ -22,6 +22,8 @@ export default defineConfig({
       '/get-led-config':  { target: httpTarget, changeOrigin: true },
       '/save-led-config': { target: httpTarget, changeOrigin: true },
       '/clear-led-state': { target: httpTarget, changeOrigin: true },
+      '/get-settings':    { target: httpTarget, changeOrigin: true },
+      '/save-settings':   { target: httpTarget, changeOrigin: true },
       '/update':          { target: httpTarget, changeOrigin: true },
       '/setup':           { target: httpTarget, changeOrigin: true },
       '/logs':            { target: httpTarget, changeOrigin: true }

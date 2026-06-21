@@ -2,8 +2,6 @@
 
 #include <lvgl.h>
 #include <Arduino.h>
-#include "AudioAnalyzer.h"
-#include <Filter.h>
 
 #define NUM_VU_CHANNELS 7
 #define SEGMENTS_PER_BAR 10
@@ -13,6 +11,9 @@
 #define BAR_SPACING 10
 #define LEFT_ALIGNMENT 260
 #define BAR_TOTAL_HEIGHT ((SEGMENT_HEIGHT + SEGMENT_GAP) * SEGMENTS_PER_BAR)
+// Height of the frequency-label row drawn just below the bars (montserrat_14 at
+// BAR_TOTAL_HEIGHT + 5). Used when centring the whole block on the screensaver.
+#define VU_LABEL_BAND_HEIGHT 24
 
 /**
  * @brief Modern C++ class for managing an LVGL VU meter graph widget
@@ -63,31 +64,21 @@ public:
     bool initialize(lv_obj_t* parent);
 
     /**
-     * @brief Update the VU meter with new audio data
-     * Should be called regularly to refresh the display
+     * @brief Redraw the VU meter from the latest audio frame (g_audioBus).
+     * Called on the render task; pulls data, never samples.
      */
     void update();
 
     /**
-     * @brief Get the overall audio volume level
-     * @return Current volume level (0-255)
+     * @brief Re-centre the meter's content within an @p areaW × @p areaH region.
+     *
+     * The bars and frequency labels are absolutely positioned for the VU tab's
+     * geometry; this repositions the underlying canvas so the whole block sits
+     * centred (horizontally and vertically) in a full-screen region. Used by the
+     * idle screensaver — the VU tab never calls it, so the tab layout is
+     * untouched. Call after initialize().
      */
-    int getOverallVolume();
-
-    /**
-     * @brief Get VU levels for LED strips (5 channels)
-     */
-    void getVuLevels5();
-
-    /**
-     * @brief Get VU levels for LED strips (3 channels)
-     */
-    void getVuLevels3();
-
-    /**
-     * @brief Get VU levels using current configuration
-     */
-    void getVuLevels();
+    void centerContentIn(lv_coord_t areaW, lv_coord_t areaH);
 
     /**
      * @brief Check if the VU graph is initialized
@@ -101,25 +92,14 @@ public:
      */
     lv_obj_t* getLvglObject() const { return canvas_; }
 
-    /**
-     * @brief Get current VU value for a specific channel
-     * @param channel Channel index (0-6)
-     * @return VU value for the channel
-     */
-    int getVuValue(int channel) const;
-
 private:
     lv_obj_t* canvas_;
     lv_obj_t* segments_[NUM_VU_CHANNELS][SEGMENTS_PER_BAR];
     lv_obj_t* peakSegments_[NUM_VU_CHANNELS];  // Peak hold indicators
     bool initialized_;
 
-    // Audio processing components
-    ExponentialFilter<int> filters_[NUM_VU_CHANNELS];
-    ExponentialFilter<int> audioFilter_;
-    Analyzer audio_;
+    // Latest per-band levels (0-255) pulled from g_audioBus; drawn by updateVuBars
     int vuValues_[NUM_VU_CHANNELS];
-    int audioLevel_;
 
     // Peak hold tracking
     int peakLevels_[NUM_VU_CHANNELS];
@@ -132,11 +112,6 @@ private:
      * @brief Update individual VU segments with current levels
      */
     void updateVuBars();
-
-    /**
-     * @brief Read frequency data from audio analyzer
-     */
-    void readFrequencies();
 
     /**
      * @brief Clean up LVGL objects
