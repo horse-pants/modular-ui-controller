@@ -1,70 +1,48 @@
 #pragma once
 
 #include <Arduino.h>
-#include "LedHelpers.h"
-#include "LedDriver.h"
+#include "led/LedHelpers.h"
+#include "led/LedDriver.h"
+#include "led/Animations.h"
+#include "led/AnimationEngine.h"
+#include "audio/AudioFrame.h"
 #include <Preferences.h>
 
 /**
- * @brief Modern C++ LED Manager class
- * 
- * Handles LED configuration, animations, and effects with proper RAII
- * resource management and clean interfaces.
+ * @brief Coordinates LED configuration, control state, and rendering.
+ *
+ * Owns the pixel buffer + the RMT/DMA driver, loads the strip config and the
+ * persisted control state (brightness / mode / colour / animation), and drives
+ * the AnimationEngine each tick. The animation *implementations* live in
+ * AnimationEngine; the animation *vocabulary* (AnimationType + labels) lives in
+ * Animations.h. This class is the thin coordinator over those pieces.
  */
 class LEDManager {
 public:
-    // Animation types - non-audio first, then audio-reactive
-    enum AnimationType {
-        // Non-audio reactive
-        RAINBOW = 0,
-        CYLON,
-        RGBCHASER,
-        BEATSINE,
-        PLASMA,
-        SPARKLE,
-        WAVE,
-        COMET,
-        // Audio reactive
-        ICEWAVES,
-        PURPLERAIN,
-        FIRE,
-        MATRIX,
-        VU,
-        RIPPLE,
-        CONFETTI
-    };
-    
-    /**
-     * @brief Constructor
-     */
     LEDManager();
-    
-    /**
-     * @brief Destructor - automatically cleans up resources
-     */
     ~LEDManager();
-    
+
     // Disable copy operations to prevent resource issues
     LEDManager(const LEDManager&) = delete;
     LEDManager& operator=(const LEDManager&) = delete;
-    
+
     /**
      * @brief Initialize LED system and load configuration
      * @return true if successful, false otherwise
      */
     bool initialize();
-    
+
     /**
      * @brief Update LED animations and effects
      */
     void update();
-    
+
     /**
      * @brief Set LED brightness
-     * @param brightness Brightness value (0-255)
+     * @param newBrightness Brightness value (0-255)
      */
-    void setBrightness(uint8_t brightness);
-    
+    void setBrightness(uint8_t newBrightness);
+
     /**
      * @brief Perform startup fade-in sequence
      */
@@ -78,13 +56,11 @@ public:
 
     /**
      * @brief Get current brightness
-     * @return Current brightness value
      */
     uint8_t getBrightness() const { return brightness_; }
-    
+
     /**
      * @brief Set animation state
-     * @param enabled True to enable animations, false to disable
      */
     void setAnimationEnabled(bool enabled);
 
@@ -93,64 +69,60 @@ public:
      *        the OTA progress display isn't fought by the normal brightness tick.
      */
     void setOTAMode(bool enabled);
-    
+
+    /**
+     * @brief Trigger a brief non-blocking red flash (e.g. OTA failure feedback).
+     *        Rendered over the next ~1.2 s by update(); safe to call from any task.
+     */
+    void flashError();
+
     /**
      * @brief Check if animations are enabled
-     * @return True if animations are enabled
      */
     bool isAnimationEnabled() const { return showAnimation_; }
-    
+
     /**
      * @brief Set current animation type
-     * @param animation Animation type to set
      */
     void setCurrentAnimation(AnimationType animation);
-    
+
     /**
      * @brief Get current animation type
-     * @return Current animation type
      */
     AnimationType getCurrentAnimation() const { return currentAnimation_; }
-    
+
     /**
      * @brief Set VU mode state
-     * @param enabled True to enable VU brightness control
      */
     void setVuMode(bool enabled);
-    
+
     /**
      * @brief Check if VU mode is enabled
-     * @return True if VU mode is enabled
      */
     bool isVuModeEnabled() const { return vuMode_; }
-    
+
     /**
      * @brief Set white mode state
-     * @param enabled True to enable white mode
      */
     void setWhiteMode(bool enabled);
 
     /**
      * @brief Check if white mode is enabled
-     * @return True if white mode is enabled
      */
     bool isWhiteModeEnabled() const { return whiteMode_; }
 
     /**
      * @brief Set solid color mode with specified color
-     * @param color Color to set
      */
     void setSolidColor(CRGB color);
 
     /**
      * @brief Get current solid color
-     * @return Current solid color
      */
     CRGB getSolidColor() const { return solidColor_; }
 
     /**
      * @brief Fill all LEDs with a color (immediate, no state change)
-     * @param color Color to fill with
      */
     void fillColor(CRGB color);
 
@@ -161,7 +133,6 @@ public:
 
     /**
      * @brief Check if saved state was loaded on boot
-     * @return True if state was loaded from preferences
      */
     bool hasLoadedState() const { return stateLoaded_; }
 
@@ -169,61 +140,33 @@ public:
      * @brief Clear saved LED state from preferences
      */
     void clearSavedState();
-    
+
     /**
      * @brief Fill all LEDs with white
      */
     void fillWhite();
 
     /**
-     * @brief Get VU level for specific strip
-     * @param strip Strip index
-     * @return VU level for the strip
-     */
-    int getVuForStrip(int strip) const;
-    
-    /**
      * @brief Get number of LED strips
-     * @return Number of strips
      */
     int getNumStrips() const;
-    
+
     /**
      * @brief Get LEDs per strip
-     * @return LEDs per strip
      */
     int getLedsPerStrip() const;
-    
+
     /**
      * @brief Get total number of LEDs
-     * @return Total LED count
      */
     int getTotalLeds() const;
-    
+
     /**
      * @brief Check if LED configuration is valid
-     * @return True if configuration is valid
      */
     bool isConfigValid() const;
-    
-    /**
-     * @brief Get animation description
-     * @param animation Animation type
-     * @return Description string
-     */
-    static const char* getAnimationDescription(AnimationType animation);
-    
-    /**
-     * @brief Get all animation descriptions
-     * @return Array of description strings
-     */
-    static const char* const* getAnimationDescriptions();
 
 private:
-    // Configuration constants
-    static const int DATA_PIN = 10;
-    static const int MAX_BRIGHTNESS = 255;
-    
     // Member variables
     CRGB* leds_;
     int numStrips_;
@@ -231,7 +174,7 @@ private:
     int totalLeds_;
     bool configLoaded_;
     bool initialized_;
-    
+
     uint8_t brightness_;
     bool showAnimation_;
     bool vuMode_;
@@ -244,9 +187,8 @@ private:
     bool stateLoaded_;
     unsigned long stateChangedTime_;
     static const unsigned long STATE_SAVE_DEBOUNCE_MS = 5000;
-    
-    // VU data
-    int vuLevels_[7];
+
+    // Overall audio level (used for VU-mode brightness)
     int audioLevel_;
 
     // OTA progress tracking
@@ -254,6 +196,8 @@ private:
     // While true, update() is suspended so showOTAProgress() can own the strips
     // without the normal brightness/animation tick fighting it.
     bool otaMode_;
+    // Non-zero while a failure flash is active: millis() deadline to flash until.
+    unsigned long errorFlashUntilMs_;
 
     Preferences preferences_;
 
@@ -261,6 +205,7 @@ private:
     unsigned long lastAnimationUpdate_;
 
     LedDriver driver_;
+    AnimationEngine engine_;
 
     // Private methods
     void loadConfiguration();
@@ -270,40 +215,6 @@ private:
     bool allocateLedArrays();
     void deallocateLedArrays();
     void updateBrightness();
-    int getAnimationInterval() const;
-    void runAnimation();
-    
-    // Animation implementations
-    void fadeAll(int amount);
-    void fadeRed(int amount);
-    void fadeGreen(int amount);
-    void animationRainbow();
-    void animationCylon();
-    void animationRgbChaser();
-    void animationBeatSine();
-    void animationIceWaves();
-    void animationPurpleRain();
-    void animationFire();
-    void animationMatrix();
-    void animationVu();
-    void animationPlasma();
-    void animationSparkle();
-    void animationWave();
-    void animationRipple();
-    void animationComet();
-    void animationConfetti();
-    
-    // Helper methods
-    int getCentreOfStrip(int strip) const;
-    void fillFromCentre(int strip, int vuValue, CRGB colour1, CRGB colour2, CRGB colour3);
-    void moveFromCentre(int strip);
-    void moveDown();
-    int getRandomLed(int divisions, int division) const;
-    CRGB pickColour(int led, int vuValue, CRGB colour1, CRGB colour2, CRGB colour3) const;
-    int xyToIndex(int x, int y) const;  // Convert 2D coord to snake-wired linear index
-    
-    // Static animation descriptions
-    static const char* animationDescriptions_[];
 };
 
 // Global LED manager instance

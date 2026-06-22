@@ -1,7 +1,7 @@
-#include "WhiteButton.h"
-#include "UIManager.h"
+#include "ui/WhiteButton.h"
+#include "ui/UIManager.h"
 #include "modular-ui.h"
-#include "ui.h"
+#include "ui/ui.h"
 
 WhiteButton::WhiteButton()
     : button_(nullptr)
@@ -103,7 +103,6 @@ void WhiteButton::setState(bool isWhite, bool triggerCallback) {
 
     if (isWhite) {
         lv_obj_add_state(button_, LV_STATE_CHECKED);
-        extern LEDManager* g_ledManager;
         if (g_ledManager) {
             g_ledManager->setWhiteMode(true);
             g_ledManager->setAnimationEnabled(false);
@@ -140,12 +139,10 @@ void WhiteButton::handleStateChange() {
     currentState_ = !currentState_;
 
     // Call UIManager's simple helper
-    extern UIManager* g_uiManager;
     if (g_uiManager) {
         g_uiManager->logAndUpdateWhiteState(currentState_);
     } else {
         // Fallback if UIManager not available
-        extern LEDManager* g_ledManager;
         if (g_ledManager) {
             g_ledManager->setWhiteMode(currentState_);
             if (currentState_) {

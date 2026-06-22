@@ -1,4 +1,4 @@
-#include "AudioVisualiser.h"
+#include "ui/AudioVisualiser.h"
 #include "modular-ui.h"
 
 // Single shared instance — used by the static dismiss (tap) callback.

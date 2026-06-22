@@ -1,6 +1,7 @@
-#include "UIManager.h"
+#include "ui/UIManager.h"
+#include "ui/Display.h"
 #include "modular-ui.h"
-#include "ui.h"
+#include "ui/ui.h"
 #include <memory>
 #include <Preferences.h>
 #include <Logger.h>
@@ -23,203 +24,13 @@ static uint32_t lvglTickCallback() {
     return millis();
 }
 
-// Static style definitions
-lv_style_t UIManager::stylePanelMain_;
-lv_style_t UIManager::stylePanelInset_;
-lv_style_t UIManager::styleSectionLabel_;
-bool UIManager::stylesInitialized_ = false;
-
-void UIManager::initStyles() {
-    if (stylesInitialized_) return;
-
-    // Panel main style - raised hardware module look
-    lv_style_init(&stylePanelMain_);
-    lv_style_set_bg_color(&stylePanelMain_, lv_color_hex(UI_COLOR_SURFACE));
-    lv_style_set_bg_opa(&stylePanelMain_, LV_OPA_COVER);
-    lv_style_set_border_color(&stylePanelMain_, lv_color_hex(UI_COLOR_BORDER));
-    lv_style_set_border_width(&stylePanelMain_, UI_BORDER_NORMAL);
-    lv_style_set_border_opa(&stylePanelMain_, LV_OPA_COVER);
-    lv_style_set_radius(&stylePanelMain_, UI_RADIUS_MEDIUM);
-    lv_style_set_pad_all(&stylePanelMain_, UI_PADDING_MEDIUM);
-
-    // Panel inset style - darker recessed area
-    lv_style_init(&stylePanelInset_);
-    lv_style_set_bg_color(&stylePanelInset_, lv_color_hex(UI_COLOR_SURFACE_DARK));
-    lv_style_set_bg_opa(&stylePanelInset_, LV_OPA_COVER);
-    lv_style_set_border_color(&stylePanelInset_, lv_color_hex(UI_COLOR_BORDER));
-    lv_style_set_border_width(&stylePanelInset_, UI_BORDER_THIN);
-    lv_style_set_border_side(&stylePanelInset_, LV_BORDER_SIDE_FULL);
-    lv_style_set_radius(&stylePanelInset_, UI_RADIUS_SMALL);
-    lv_style_set_pad_all(&stylePanelInset_, UI_PADDING_SMALL);
-
-    // Section label style
-    lv_style_init(&styleSectionLabel_);
-    lv_style_set_text_color(&styleSectionLabel_, lv_color_hex(UI_COLOR_TEXT_MUTED));
-    lv_style_set_text_font(&styleSectionLabel_, &lv_font_montserrat_12);
-    lv_style_set_pad_bottom(&styleSectionLabel_, UI_PADDING_SMALL);
-
-    stylesInitialized_ = true;
-}
-
-lv_obj_t* UIManager::createPanel(lv_obj_t* parent) {
-    initStyles();
-
-    lv_obj_t* panel = lv_obj_create(parent);
-    lv_obj_add_style(panel, &stylePanelMain_, 0);
-    lv_obj_clear_flag(panel, LV_OBJ_FLAG_SCROLLABLE);
-
-    return panel;
-}
-
-lv_obj_t* UIManager::createSectionLabel(lv_obj_t* parent, const char* text) {
-    initStyles();
-
-    lv_obj_t* label = lv_label_create(parent);
-    lv_label_set_text(label, text);
-    lv_obj_add_style(label, &styleSectionLabel_, 0);
-
-    return label;
-}
-
-// LGFX Display class - moved from ui.cpp
-class MyLGFX : public lgfx::LGFX_Device {
-    lgfx::Panel_ST7796 _panel_instance;
-    lgfx::Bus_Parallel8 _bus_instance;
-    lgfx::Light_PWM _light_instance;
-    lgfx::Touch_FT5x06 _touch_instance;
-
-public:
-    MyLGFX(void) {
-        {
-            auto cfg = _bus_instance.config();
-            cfg.freq_write = 40000000;
-            cfg.pin_wr = 47;
-            cfg.pin_rd = -1;
-            cfg.pin_rs = 0;
-            cfg.pin_d0 = 9;
-            cfg.pin_d1 = 46;
-            cfg.pin_d2 = 3;
-            cfg.pin_d3 = 8;
-            cfg.pin_d4 = 18;
-            cfg.pin_d5 = 17;
-            cfg.pin_d6 = 16;
-            cfg.pin_d7 = 15;
-            _bus_instance.config(cfg);
-            _panel_instance.setBus(&_bus_instance);
-        }
-
-        {
-            auto cfg = _panel_instance.config();
-            cfg.pin_cs = -1;
-            cfg.pin_rst = 4;
-            cfg.pin_busy = -1;
-            cfg.memory_width = 320;
-            cfg.memory_height = 480;
-            cfg.panel_width = 320;
-            cfg.panel_height = 480;
-            cfg.offset_x = 0;
-            cfg.offset_y = 0;
-            cfg.offset_rotation = 0;
-            cfg.dummy_read_pixel = 8;
-            cfg.dummy_read_bits = 1;
-            cfg.readable = true;
-            cfg.invert = true;
-            cfg.rgb_order = false;
-            cfg.dlen_16bit = false;
-            cfg.bus_shared = true;
-
-            _panel_instance.config(cfg);
-        }
-
-        {
-            auto cfg = _light_instance.config();
-            cfg.pin_bl = 45;
-            cfg.invert = false;
-            cfg.freq = 44100;
-            cfg.pwm_channel = 7;
-
-            _light_instance.config(cfg);
-            _panel_instance.setLight(&_light_instance);
-        }
-
-        {
-            auto cfg = _touch_instance.config();
-            cfg.i2c_port = 1;
-            cfg.i2c_addr = 0x38;
-            cfg.pin_sda = 6;
-            cfg.pin_scl = 5;
-            cfg.freq = 400000;
-            cfg.x_min = 0;
-            cfg.x_max = 320;
-            cfg.y_min = 0;
-            cfg.y_max = 480;
-
-            _touch_instance.config(cfg);
-            _panel_instance.setTouch(&_touch_instance);
-        }
-
-        setPanel(&_panel_instance);
-    }
-};
-
-// Static display instance
-static MyLGFX lcd;
-
-// LVGL display configuration
-static const uint16_t screenWidth = 320;
-static const uint16_t screenHeight = 480;
-static lv_color_t buf[screenWidth * 10];
-
-// Display flush callback
-void displayFlush(lv_display_t* disp, const lv_area_t* area, uint8_t* px_map) {
-    uint32_t w = (area->x2 - area->x1 + 1);
-    uint32_t h = (area->y2 - area->y1 + 1);
-
-    lcd.startWrite();
-    lcd.setAddrWindow(area->x1, area->y1, w, h);
-    lcd.pushPixels((uint16_t*)px_map, w * h, true);
-    lcd.endWrite();
-
-    lv_display_flush_ready(disp);
-}
-
-// Last screen-touch timestamp, used to trigger the idle screensaver. Written
-// here (render task, inside lv_timer_handler) and read in UIManager::update on
-// the same task — no synchronisation needed.
-static uint32_t s_lastTouchMs = 0;
-
-// Touch read callback
-void touchpadRead(lv_indev_t* indev_driver, lv_indev_data_t* data) {
-    uint16_t touchX, touchY;
-    bool touched = lcd.getTouch(&touchX, &touchY);
-
-    if (!touched) {
-        data->state = LV_INDEV_STATE_RELEASED;
-    } else {
-        data->state = LV_INDEV_STATE_PRESSED;
-        data->point.x = touchX;
-        data->point.y = touchY;
-        s_lastTouchMs = millis();  // any screen touch resets the idle timer
-    }
-}
-
 UIManager::UIManager()
-    : brightnessSlider_(nullptr)
-    , colourWheel_(nullptr)
-    , effectsList_(nullptr)
-    , whiteButton_(nullptr)
-    , vuButton_(nullptr)
-    , vuGraph_(nullptr)
+    : colourTab_(nullptr)
+    , vuTab_(nullptr)
     , audioVisualiser_(nullptr)
     , tabview_(nullptr)
     , tab1_(nullptr)
     , tab2_(nullptr)
-    , otaScreen_(nullptr)
-    , otaLabel_(nullptr)
-    , otaBar_(nullptr)
-    , otaScreenActive_(false)
-    , otaPendingProgress_(0)
-    , otaProgressChanged_(false)
     , initialized_(false)
     , screenInitialized_(false)
     , screensaverEnabled_(true)
@@ -245,122 +56,25 @@ UIManager::~UIManager() {
     }
 }
 
-UIManager::UIManager(UIManager&& other) noexcept
-    : brightnessSlider_(std::move(other.brightnessSlider_))
-    , colourWheel_(std::move(other.colourWheel_))
-    , effectsList_(std::move(other.effectsList_))
-    , whiteButton_(std::move(other.whiteButton_))
-    , vuButton_(std::move(other.vuButton_))
-    , vuGraph_(std::move(other.vuGraph_))
-    , audioVisualiser_(std::move(other.audioVisualiser_))
-    , tabview_(other.tabview_)
-    , tab1_(other.tab1_)
-    , tab2_(other.tab2_)
-    , otaScreen_(other.otaScreen_)
-    , otaLabel_(other.otaLabel_)
-    , otaBar_(other.otaBar_)
-    , otaScreenActive_(other.otaScreenActive_)
-    , otaPendingProgress_(other.otaPendingProgress_)
-    , otaProgressChanged_(other.otaProgressChanged_)
-    , initialized_(other.initialized_)
-    , screenInitialized_(other.screenInitialized_)
-    , screensaverEnabled_(other.screensaverEnabled_)
-    , screensaverIdleMs_(other.screensaverIdleMs_)
-    , uiCommandQueue_(other.uiCommandQueue_)
-    , renderTaskHandle_(other.renderTaskHandle_)
-{
-    // Reset the moved-from object. NOTE: a running render task captured the
-    // original `this`; moving a UIManager while its task runs would dangle.
-    // UIManager is a never-moved global in practice, so this is theoretical.
-    other.uiCommandQueue_ = nullptr;
-    other.renderTaskHandle_ = nullptr;
-    other.tabview_ = nullptr;
-    other.tab1_ = nullptr;
-    other.tab2_ = nullptr;
-    other.otaScreen_ = nullptr;
-    other.otaLabel_ = nullptr;
-    other.otaBar_ = nullptr;
-    other.otaScreenActive_ = false;
-    other.otaPendingProgress_ = 0;
-    other.otaProgressChanged_ = false;
-    other.initialized_ = false;
-    other.screenInitialized_ = false;
-}
-
-UIManager& UIManager::operator=(UIManager&& other) noexcept {
-    if (this != &other) {
-        // Clean up current resources
-        if (renderTaskHandle_) {
-            vTaskDelete(renderTaskHandle_);
-        }
-        cleanup();
-        if (uiCommandQueue_) {
-            vQueueDelete(uiCommandQueue_);
-        }
-
-        // Move resources from other
-        uiCommandQueue_ = other.uiCommandQueue_;
-        other.uiCommandQueue_ = nullptr;
-        renderTaskHandle_ = other.renderTaskHandle_;
-        other.renderTaskHandle_ = nullptr;
-        brightnessSlider_ = std::move(other.brightnessSlider_);
-        colourWheel_ = std::move(other.colourWheel_);
-        effectsList_ = std::move(other.effectsList_);
-        whiteButton_ = std::move(other.whiteButton_);
-        vuButton_ = std::move(other.vuButton_);
-        vuGraph_ = std::move(other.vuGraph_);
-        audioVisualiser_ = std::move(other.audioVisualiser_);
-        tabview_ = other.tabview_;
-        tab1_ = other.tab1_;
-        tab2_ = other.tab2_;
-        otaScreen_ = other.otaScreen_;
-        otaLabel_ = other.otaLabel_;
-        otaBar_ = other.otaBar_;
-        otaScreenActive_ = other.otaScreenActive_;
-        otaPendingProgress_ = other.otaPendingProgress_;
-        otaProgressChanged_ = other.otaProgressChanged_;
-        initialized_ = other.initialized_;
-        screenInitialized_ = other.screenInitialized_;
-        screensaverEnabled_ = other.screensaverEnabled_;
-        screensaverIdleMs_ = other.screensaverIdleMs_;
-
-        // Reset the moved-from object
-        other.tabview_ = nullptr;
-        other.tab1_ = nullptr;
-        other.tab2_ = nullptr;
-        other.otaScreen_ = nullptr;
-        other.otaLabel_ = nullptr;
-        other.otaBar_ = nullptr;
-        other.otaScreenActive_ = false;
-        other.otaPendingProgress_ = 0;
-        other.otaProgressChanged_ = false;
-        other.initialized_ = false;
-        other.screenInitialized_ = false;
-    }
-    return *this;
-}
-
 bool UIManager::initializeScreen() {
     if (screenInitialized_) {
         return true; // Already initialized
     }
-    
+
     try {
-        // Initialize LovyanGFX
-        lcd.init();
+        // Hardware panel first, then LVGL core, then wire the two together.
+        Display::initPanel();
         lv_init();
 
         // Task-agnostic tick source (no more lv_tick_inc in loop())
         lv_tick_set_cb(lvglTickCallback);
 
-        lcd.setRotation(2);
-        
-        setupDisplayDriver();
-        setupTouchDriver();
-        
+        Display::setupLvglDisplay();
+        Display::setupLvglTouch();
+
         screenInitialized_ = true;
         return true;
-        
+
     } catch (...) {
         return false;
     }
@@ -408,65 +122,14 @@ void UIManager::update() {
     // touch LVGL, so all lv_* mutation originates on this single task.
     drainUiCommands();
 
-    // Handle OTA screen updates (must be in main loop for LVGL thread safety)
-    if (otaProgressChanged_) {
-        otaProgressChanged_ = false;
-
+    // Handle OTA screen updates (must run on the render task for LVGL safety).
+    if (otaScreen_.changed()) {
         // The OTA screen lives under the top-layer screensaver — dismiss the
         // screensaver so the progress is visible.
-        if (otaScreenActive_ && audioVisualiser_ && audioVisualiser_->isActive()) {
+        if (otaScreen_.isActive() && audioVisualiser_ && audioVisualiser_->isActive()) {
             audioVisualiser_->hide();
         }
-
-        if (otaScreenActive_ && !otaScreen_) {
-            // Create OTA screen
-            otaScreen_ = lv_obj_create(lv_scr_act());
-            lv_obj_set_size(otaScreen_, LV_HOR_RES, LV_VER_RES);
-            lv_obj_set_style_bg_color(otaScreen_, lv_color_hex(UI_COLOR_BACKGROUND), 0);
-            lv_obj_set_style_bg_opa(otaScreen_, LV_OPA_COVER, 0);
-            lv_obj_set_style_border_width(otaScreen_, 0, 0);
-            lv_obj_clear_flag(otaScreen_, LV_OBJ_FLAG_SCROLLABLE);
-
-            // Title label
-            otaLabel_ = lv_label_create(otaScreen_);
-            lv_label_set_text(otaLabel_, "OTA UPDATE\n0%");
-            lv_obj_set_style_text_color(otaLabel_, lv_color_hex(UI_COLOR_PRIMARY), 0);
-            lv_obj_set_style_text_font(otaLabel_, &lv_font_montserrat_32, 0);
-            lv_obj_set_style_text_align(otaLabel_, LV_TEXT_ALIGN_CENTER, 0);
-            lv_obj_align(otaLabel_, LV_ALIGN_CENTER, 0, -60);
-
-            // Progress bar
-            otaBar_ = lv_bar_create(otaScreen_);
-            lv_obj_set_size(otaBar_, 300, 30);
-            lv_obj_align(otaBar_, LV_ALIGN_CENTER, 0, 20);
-            lv_obj_set_style_bg_color(otaBar_, lv_color_hex(UI_COLOR_SURFACE), 0);
-            lv_obj_set_style_bg_color(otaBar_, lv_color_hex(UI_COLOR_PRIMARY), LV_PART_INDICATOR);
-            lv_obj_set_style_border_color(otaBar_, lv_color_hex(UI_COLOR_BORDER), 0);
-            lv_obj_set_style_border_width(otaBar_, 2, 0);
-            lv_obj_set_style_radius(otaBar_, 8, 0);
-            lv_bar_set_range(otaBar_, 0, 100);
-            lv_bar_set_value(otaBar_, 0, LV_ANIM_OFF);
-        } else if (otaScreenActive_ && otaScreen_) {
-            // Update existing OTA screen
-            if (otaBar_) {
-                lv_bar_set_value(otaBar_, otaPendingProgress_, LV_ANIM_OFF);
-            }
-            if (otaLabel_) {
-                char buffer[32];
-                if (otaPendingProgress_ >= 100) {
-                    snprintf(buffer, sizeof(buffer), "OTA UPDATE\nCOMPLETE!");
-                } else {
-                    snprintf(buffer, sizeof(buffer), "OTA UPDATE\n%u%%", otaPendingProgress_);
-                }
-                lv_label_set_text(otaLabel_, buffer);
-            }
-        } else if (!otaScreenActive_ && otaScreen_) {
-            // Cleanup OTA screen
-            lv_obj_del(otaScreen_);
-            otaScreen_ = nullptr;
-            otaLabel_ = nullptr;
-            otaBar_ = nullptr;
-        }
+        otaScreen_.apply();
     }
 
     // Idle screensaver: after screensaverIdleMs_ with no screen touch, reveal the
@@ -482,17 +145,17 @@ void UIManager::update() {
                 audioVisualiser_->update();
             }
         } else {
-            if (vuGraph_) {
-                vuGraph_->update();
+            if (vuTab_) {
+                vuTab_->update();
             }
             // Don't kick in when disabled, or over the OTA progress screen.
-            if (screensaverEnabled_ && !otaScreenActive_ &&
-                (millis() - s_lastTouchMs) > screensaverIdleMs_) {
+            if (screensaverEnabled_ && !otaScreen_.isActive() &&
+                (millis() - Display::lastTouchMs()) > screensaverIdleMs_) {
                 audioVisualiser_->show();
             }
         }
-    } else if (vuGraph_) {
-        vuGraph_->update();
+    } else if (vuTab_) {
+        vuTab_->update();
     }
 
     // Process LVGL tasks
@@ -520,12 +183,12 @@ void UIManager::drainUiCommands() {
 void UIManager::applyUiCommand(const UiCommand& cmd) {
     switch (cmd.type) {
         case UiCommandType::SetVu:
-            setVuState(cmd.boolValue);
+            if (colourTab_) colourTab_->setVuState(cmd.boolValue);
             updateWebUi();
             break;
 
         case UiCommandType::SetWhite:
-            setWhiteState(cmd.boolValue);
+            if (colourTab_) colourTab_->setWhiteState(cmd.boolValue);
             updateWebUi();
             break;
 
@@ -542,10 +205,12 @@ void UIManager::applyUiCommand(const UiCommand& cmd) {
             break;
 
         case UiCommandType::SetAnimation:
-            if (cmd.boolValue) {
-                setAnimation(cmd.intValue);
+            if (colourTab_) {
+                if (cmd.boolValue) {
+                    colourTab_->setAnimation(cmd.intValue);
+                }
+                colourTab_->setAnimationState(cmd.boolValue);
             }
-            setAnimationState(cmd.boolValue);
             updateWebUi();
             break;
 
@@ -596,155 +261,39 @@ void UIManager::startRenderTask() {
     }
 }
 
+// These delegate to the Colour tab (which owns the widgets + control logic).
+// Kept on UIManager because the VuButton / WhiteButton widgets call back through
+// g_uiManager, and the web command queue dispatches here.
 void UIManager::applyCurrentColor() {
-    if (colourWheel_) {
-        uint8_t r, g, b;
-        colourWheel_->getColorRGB(r, g, b);
-
-        if (g_ledManager) {
-            g_ledManager->setAnimationEnabled(false);
-            g_ledManager->setWhiteMode(false);
-            g_ledManager->fillColor(CRGB(r, g, b));
-        }
-
-        if (whiteButton_) {
-            whiteButton_->setState(false, false);
-        }
-
-        // Deactivate effects dropdown (color is now active, not animation)
-        if (effectsList_) {
-            effectsList_->setActiveState(false);
-        }
-
-        updateWebUi();
-    }
+    if (colourTab_) colourTab_->applyCurrentColor();
 }
 
 void UIManager::logAndUpdateVuState(bool newState) {
-    Logger.info("VU Button - State: %s", newState ? "ON" : "OFF");
-
-    if (g_ledManager) {
-        g_ledManager->setVuMode(newState);
-    }
-
-    updateWebUi();
+    if (colourTab_) colourTab_->logAndUpdateVuState(newState);
 }
 
 void UIManager::logAndUpdateWhiteState(bool newState) {
-    Logger.info("White Button - State: %s", newState ? "ON" : "OFF");
-
-    if (g_ledManager) {
-        g_ledManager->setWhiteMode(newState);
-        if (newState) {
-            g_ledManager->setAnimationEnabled(false);
-            g_ledManager->fillWhite();
-        }
-    }
-
-    // Deactivate effects dropdown styling when white is on
-    if (newState && effectsList_) {
-        effectsList_->setActiveState(false);
-    }
-
-    updateWebUi();
+    if (colourTab_) colourTab_->logAndUpdateWhiteState(newState);
 }
 
 void UIManager::setVuState(bool newState) {
-    logAndUpdateVuState(newState);
-
-    if (vuButton_) {
-        vuButton_->setState(newState);
-    }
+    if (colourTab_) colourTab_->setVuState(newState);
 }
 
 void UIManager::setWhiteState(bool newState) {
-    logAndUpdateWhiteState(newState);
-
-    if (whiteButton_) {
-        whiteButton_->setState(newState);
-    }
+    if (colourTab_) colourTab_->setWhiteState(newState);
 }
 
 void UIManager::setAnimationState(bool newState) {
-    if (g_ledManager) {
-        g_ledManager->setAnimationEnabled(newState);
-        if (newState) {
-            g_ledManager->setWhiteMode(false);
-        }
-    }
-
-    if (newState) {
-        if (whiteButton_) {
-            whiteButton_->setState(false, false);
-        }
-    } else {
-        applyCurrentColor();
-    }
+    if (colourTab_) colourTab_->setAnimationState(newState);
 }
 
 void UIManager::setAnimation(int animation) {
-    if (effectsList_) {
-        effectsList_->setSelectedEffect(animation, false);
-        effectsList_->setActiveState(true);  // Highlight as active
-    }
-
-    if (whiteButton_) {
-        whiteButton_->setState(false, false);
-    }
-
-    if (g_ledManager) {
-        g_ledManager->setCurrentAnimation(static_cast<LEDManager::AnimationType>(animation));
-        g_ledManager->setAnimationEnabled(true);
-        g_ledManager->setWhiteMode(false);
-    }
+    if (colourTab_) colourTab_->setAnimation(animation);
 }
 
 void UIManager::syncWithLEDState() {
-    if (!g_ledManager) return;
-
-    Logger.info("Syncing UI with LED state...");
-
-    // Sync brightness slider
-    if (brightnessSlider_) {
-        brightnessSlider_->setBrightness(g_ledManager->getBrightness(), false, false);
-    }
-
-    // Sync VU button
-    if (vuButton_) {
-        vuButton_->setState(g_ledManager->isVuModeEnabled());
-    }
-
-    // Sync white button
-    if (whiteButton_) {
-        whiteButton_->setState(g_ledManager->isWhiteModeEnabled(), false);
-    }
-
-    // Sync animation/effects dropdown
-    if (g_ledManager->isAnimationEnabled()) {
-        if (effectsList_) {
-            effectsList_->setSelectedEffect(static_cast<int>(g_ledManager->getCurrentAnimation()), false);
-            effectsList_->setActiveState(true);
-        }
-    } else {
-        if (effectsList_) {
-            effectsList_->setActiveState(false);
-        }
-    }
-
-    // Sync color wheel display with saved solid color (don't apply to LEDs, just update UI)
-    if (colourWheel_) {
-        CRGB color = g_ledManager->getSolidColor();
-        colourWheel_->setColor(color.r, color.g, color.b, false);  // false = UI only, no LED update
-    }
-
-    // Notify web UI of current state
-    updateWebUi();
-
-    Logger.info("UI sync complete: bright=%d, vu=%d, white=%d, anim=%d",
-                g_ledManager->getBrightness(),
-                g_ledManager->isVuModeEnabled(),
-                g_ledManager->isWhiteModeEnabled(),
-                g_ledManager->isAnimationEnabled());
+    if (colourTab_) colourTab_->syncWithLed();
 }
 
 void UIManager::applySynthTheme() {
@@ -821,145 +370,15 @@ bool UIManager::createTabview() {
 }
 
 bool UIManager::initializeComponents() {
-    initStyles();
-
-    // ==========================================================================
-    // TAB 1: COLOUR - Fader style layout
-    // Layout: Left column (fader + VU) | Center (wheel) | Bottom (White + Effects)
-    // ==========================================================================
-    lv_obj_set_flex_flow(tab1_, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_flex_align(tab1_, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_all(tab1_, UI_PADDING_MEDIUM, 0);
-    lv_obj_set_style_pad_row(tab1_, UI_SPACING_NORMAL, 0);
-    lv_obj_add_flag(tab1_, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
-
-    // --- Main content row: left column (fader+VU) + wheel ---
-    lv_obj_t* mainRow = lv_obj_create(tab1_);
-    lv_obj_set_size(mainRow, LV_PCT(100), LV_SIZE_CONTENT);
-    lv_obj_set_flex_grow(mainRow, 1);
-    lv_obj_set_flex_flow(mainRow, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(mainRow, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_bg_opa(mainRow, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_border_width(mainRow, 0, 0);
-    lv_obj_set_style_pad_all(mainRow, 0, 0);
-    lv_obj_set_style_pad_left(mainRow, UI_PADDING_LARGE, 0);  // Push fader right a bit
-    lv_obj_set_style_pad_column(mainRow, UI_SPACING_LOOSE, 0);
-    lv_obj_clear_flag(mainRow, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_add_flag(mainRow, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
-
-    // --- Left column: Fader + VU button (stacked vertically) ---
-    lv_obj_t* leftColumn = lv_obj_create(mainRow);
-    lv_obj_set_size(leftColumn, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-    lv_obj_set_flex_flow(leftColumn, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_flex_align(leftColumn, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_bg_opa(leftColumn, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_border_width(leftColumn, 0, 0);
-    lv_obj_set_style_pad_all(leftColumn, 0, 0);
-    lv_obj_set_style_pad_row(leftColumn, UI_SPACING_NORMAL, 0);
-    lv_obj_clear_flag(leftColumn, LV_OBJ_FLAG_SCROLLABLE);
-
-    // Brightness fader (vertical)
-    brightnessSlider_.reset(new BrightnessSlider(255));
-    g_brightnessSlider = brightnessSlider_.get();
-    if (brightnessSlider_) {
-        brightnessSlider_->setCallback([this](int newBrightness) {
-            if (g_ledManager) {
-                g_ledManager->setBrightness(newBrightness);
-                g_ledManager->setVuMode(false);
-            }
-            if (vuButton_) {
-                vuButton_->setState(false);
-            }
-            updateWebUi();
-        });
-
-        int initialBrightness = g_ledManager ? g_ledManager->getBrightness() : 128;
-        if (!brightnessSlider_->initialize(leftColumn, initialBrightness)) {
-            return false;
-        }
-    }
-
-    // VU button (directly under fader)
-    vuButton_.reset(new VuButton());
-    g_vuButton = vuButton_.get();
-    if (vuButton_ && !vuButton_->initialize(leftColumn)) {
-        return false;
-    }
-    if (vuButton_) {
-        vuButton_->setCallback([this](bool newState) {
-            if (g_ledManager) {
-                g_ledManager->setVuMode(newState);
-            }
-            updateWebUi();
-        });
-    }
-
-    // --- Center: Colour wheel (vertically centered with left column) ---
-    lv_obj_t* wheelContainer = lv_obj_create(mainRow);
-    lv_obj_set_flex_grow(wheelContainer, 1);
-    lv_obj_set_height(wheelContainer, LV_SIZE_CONTENT);
-    lv_obj_set_flex_flow(wheelContainer, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_flex_align(wheelContainer, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_bg_opa(wheelContainer, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_border_width(wheelContainer, 0, 0);
-    lv_obj_set_style_pad_all(wheelContainer, 20, 0);  // Room for indicator
-    lv_obj_clear_flag(wheelContainer, LV_OBJ_FLAG_SCROLLABLE);
-
-    colourWheel_.reset(new ColourWheel());
-    g_colourWheel = colourWheel_.get();
-    if (colourWheel_ && !colourWheel_->initialize(wheelContainer, 180, true)) {
-        return false;
-    }
-    if (colourWheel_) {
-        colourWheel_->setCallback([this](uint8_t r, uint8_t g, uint8_t b) {
-            this->applyCurrentColor();
-        });
-    }
-
-    // --- Bottom row: White + Effects buttons ---
-    lv_obj_t* bottomRow = lv_obj_create(tab1_);
-    lv_obj_set_size(bottomRow, LV_PCT(100), LV_SIZE_CONTENT);
-    lv_obj_set_flex_flow(bottomRow, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(bottomRow, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_bg_opa(bottomRow, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_border_width(bottomRow, 0, 0);
-    lv_obj_set_style_pad_all(bottomRow, 0, 0);
-    lv_obj_set_style_pad_column(bottomRow, UI_SPACING_NORMAL, 0);
-    lv_obj_clear_flag(bottomRow, LV_OBJ_FLAG_SCROLLABLE);
-
-    // White button
-    whiteButton_.reset(new WhiteButton());
-    g_whiteButton = whiteButton_.get();
-    if (whiteButton_ && !whiteButton_->initialize(bottomRow)) {
+    // Colour control tab (fader, VU toggle, wheel, white, effects).
+    colourTab_ = std::make_unique<ColourTab>();
+    if (!colourTab_->build(tab1_)) {
         return false;
     }
 
-    // Effects dropdown
-    effectsList_.reset(new EffectsList());
-    g_effectsList = effectsList_.get();
-    if (effectsList_ && !effectsList_->initialize(bottomRow)) {
-        return false;
-    }
-    if (effectsList_) {
-        effectsList_->setCallback([this](int effectIndex) {
-            if (g_ledManager) {
-                g_ledManager->setAnimationEnabled(true);
-                g_ledManager->setCurrentAnimation(static_cast<LEDManager::AnimationType>(effectIndex));
-            }
-
-            // Animation is now active
-            effectsList_->setActiveState(true);
-
-            updateWebUi();
-        });
-    }
-
-    // ==========================================================================
-    // TAB 2: VU GRAPH
-    // ==========================================================================
-    vuGraph_.reset(new VuGraph());
-    g_vuGraph = vuGraph_.get();
-    if (vuGraph_ && !vuGraph_->initialize(tab2_)) {
+    // VU meter tab.
+    vuTab_ = std::make_unique<VuTab>();
+    if (!vuTab_->build(tab2_)) {
         return false;
     }
 
@@ -1009,43 +428,13 @@ void UIManager::setScreensaverConfig(bool enabled, uint32_t idleMs) {
                 enabled ? "enabled" : "disabled", (unsigned)idleMs);
 }
 
-void UIManager::setupDisplayDriver() {
-    // LVGL 9: Create display
-    lv_display_t* disp = lv_display_create(screenWidth, screenHeight);
-
-    // Set display buffer
-    lv_display_set_buffers(disp, buf, NULL, sizeof(buf), LV_DISPLAY_RENDER_MODE_PARTIAL);
-
-    // Set flush callback
-    lv_display_set_flush_cb(disp, displayFlush);
-}
-
-void UIManager::setupTouchDriver() {
-    // LVGL 9: Create and setup input device
-    lv_indev_t* indev = lv_indev_create();
-    lv_indev_set_type(indev, LV_INDEV_TYPE_POINTER);
-    lv_indev_set_read_cb(indev, touchpadRead);
-}
-
 void UIManager::cleanup() {
-    // Clear global pointers before resetting smart pointers
-    g_brightnessSlider = nullptr;
-    g_colourWheel = nullptr;
-    g_effectsList = nullptr;
-    g_whiteButton = nullptr;
-    g_vuButton = nullptr;
-    g_vuGraph = nullptr;
-
-    // Smart pointers will automatically clean up their resources.
-    // audioVisualiser_ nulls its own g_audioVisualiser and frees its canvas
-    // buffer in its destructor; reset it before deleting the tabview so its
-    // container is gone before the parent tab is.
-    brightnessSlider_.reset();
-    colourWheel_.reset();
-    effectsList_.reset();
-    whiteButton_.reset();
-    vuButton_.reset();
-    vuGraph_.reset();
+    // Reset the view components before deleting the tabview, so each tab's
+    // widgets (and their containers) are gone before the parent tab is. Each
+    // tab's destructor also nulls the g_* widget globals it published;
+    // audioVisualiser_ nulls its own g_audioVisualiser + frees its canvas.
+    colourTab_.reset();
+    vuTab_.reset();
     audioVisualiser_.reset();
 
     // Clean up LVGL objects
@@ -1055,12 +444,7 @@ void UIManager::cleanup() {
     }
 
     // Clean up OTA screen if it exists
-    if (otaScreen_) {
-        lv_obj_del(otaScreen_);
-        otaScreen_ = nullptr;
-        otaLabel_ = nullptr;
-        otaBar_ = nullptr;
-    }
+    otaScreen_.teardown();
 
     tab1_ = nullptr;
     tab2_ = nullptr;
@@ -1076,21 +460,18 @@ void UIManager::scrollBeginEvent(lv_event_t* e) {
 }
 
 void UIManager::showOTAScreen() {
-    // Just set flag - actual screen creation happens in update()
-    otaScreenActive_ = true;
-    otaPendingProgress_ = 0;
-    otaProgressChanged_ = true;
-    g_ledManager->fillColor(CRGB(0, 0, 0));
+    // Flag the overlay; the render task creates it in update(). Also blank the
+    // LEDs so the strips don't keep animating during the update.
+    otaScreen_.show();
+    if (g_ledManager) {
+        g_ledManager->fillColor(CRGB(0, 0, 0));
+    }
 }
 
 void UIManager::updateOTAProgress(uint8_t progress) {
-    // Just set flag - actual update happens in update()
-    otaPendingProgress_ = progress;
-    otaProgressChanged_ = true;
+    otaScreen_.updateProgress(progress);
 }
 
 void UIManager::hideOTAScreen() {
-    // Just set flag - actual cleanup happens in update()
-    otaScreenActive_ = false;
-    otaProgressChanged_ = true;
+    otaScreen_.hide();
 }

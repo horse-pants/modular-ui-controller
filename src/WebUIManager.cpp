@@ -1,16 +1,13 @@
 #include "WebUIManager.h"
-#include "UIManager.h"
-#include "ui.h"
+#include "WebApi.h"
+#include "ui/UIManager.h"
+#include "ui/ui.h"
 #include <WiFiSetupManager.h>
 #include <OTAManager.h>
 #include <Logger.h>
-#include "LEDManager.h"
-#include "ColourWheel.h"
-#include "LedHelpers.h"  // CRGB color constants
-#include "AudioTask.h"   // pause/resume audio task around OTA
-
-// Global manager instances
-extern LEDManager* g_ledManager;
+#include "led/LEDManager.h"   // g_ledManager
+#include "ui/ColourWheel.h"
+#include "audio/AudioTask.h"  // pause/resume audio task around OTA
 
 // Global WebUI manager instance
 WebUIManager* g_webUIManager = nullptr;
@@ -46,9 +43,7 @@ bool WebUIManager::initialize() {
     }
 
     initializeWebSocket();
-    setupRoutes();
-    setupAPIEndpoints();
-    setupStaticFiles();
+    WebApi::registerRoutes(server_);
 
     // Initialize OTA Manager with callbacks
     if (!g_otaManager) {
@@ -95,18 +90,15 @@ bool WebUIManager::initialize() {
         // Set end callback for failure handling
         g_otaManager->setEndCallback([](bool success) {
             if (!success) {
-                // Flash red on failure — keep otaMode_ on so update() doesn't
-                // fight the flash, then release the strips back to normal.
+                // OTA failed (no reboot). Release the strips back to normal and
+                // ask for a non-blocking red flash — do NOT block here (this runs
+                // on the AsyncTCP task; the old delay()-based blink stalled it ~1.2s
+                // and never even rendered, since update() is suspended in OTA mode).
                 if (g_ledManager) {
-                    for (int i = 0; i < 3; i++) {
-                        g_ledManager->fillColor(CRGB::Red);
-                        delay(200);
-                        g_ledManager->fillColor(CRGB::Black);
-                        delay(200);
-                    }
                     g_ledManager->setOTAMode(false);
+                    g_ledManager->flashError();
                 }
-                // OTA failed (no reboot) — bring the audio task back.
+                // Bring the audio task back.
                 resumeAudioTask();
             }
             // On success the device restarts, so the flag resets implicitly.
@@ -195,158 +187,15 @@ void WebUIManager::initializeWebSocket() {
     server_->addHandler(&webSocket_);
 }
 
-void WebUIManager::setupRoutes() {
-    Logger.debug("=== WebUIManager: Setting up routes ===");
-
-    // Root (/) is handled by the static handler in setupStaticFiles() via
-    // setDefaultFile("index.html"). AsyncFileResponse auto-detects .gz siblings
-    // and sets Content-Encoding: gzip transparently.
-
-    server_->on("/test", HTTP_GET, [](AsyncWebServerRequest* request) {
-        request->send(200, "text/plain", "Server is working! IP: " + WiFi.localIP().toString());
-    });
-
-    Logger.debug("=== WebUIManager: Routes setup complete ===");
-    // NOTE: WiFi setup routes (/setup, /factory-reset) are handled by
-    // WiFiSetupManager library (serves embedded HTML with neutral theme)
-}
-
-void WebUIManager::setupAPIEndpoints() {
-    // NOTE: WiFi setup endpoints (/get-networks, /save-wifi, /factory-reset POST)
-    // are handled by WiFiSetupManager library
-
-    // LED Configuration page — served by the Svelte SPA. We send the gzipped
-    // index.html and let the Svelte router show the LedConfig view based on
-    // window.location.pathname. AsyncFileResponse auto-detects the .gz sibling.
-    server_->on("/led-config", HTTP_GET, [](AsyncWebServerRequest* request) {
-        request->send(LittleFS, "/web/index.html", "text/html");
-    });
-
-    server_->on("/get-led-config", HTTP_GET, [](AsyncWebServerRequest* request) {
-        Preferences ledPrefs;
-        ledPrefs.begin("led-config", true); // Read-only
-
-        bool hasLedSettings = ledPrefs.isKey("num_strips");
-        int numStrips = ledPrefs.getInt("num_strips", 0);
-        int ledsPerStrip = ledPrefs.getInt("leds_per_strip", 0);
-        int totalLeds = numStrips * ledsPerStrip;
-
-        ledPrefs.end();
-
-        String json = "{";
-        json += "\"hasLedSettings\":" + String(hasLedSettings ? "true" : "false") + ",";
-        json += "\"numStrips\":" + String(numStrips) + ",";
-        json += "\"ledsPerStrip\":" + String(ledsPerStrip) + ",";
-        json += "\"totalLeds\":" + String(totalLeds);
-        json += "}";
-
-        request->send(200, "application/json", json);
-    });
-
-    server_->on("/save-led-config", HTTP_POST, [](AsyncWebServerRequest* request) {
-        int numStrips = 0;
-        int ledsPerStrip = 0;
-
-        if (request->hasParam("num_strips", true)) {
-            numStrips = request->getParam("num_strips", true)->value().toInt();
-        }
-        if (request->hasParam("leds_per_strip", true)) {
-            ledsPerStrip = request->getParam("leds_per_strip", true)->value().toInt();
-        }
-
-        if (numStrips > 0 && ledsPerStrip > 0) {
-            Preferences ledPrefs;
-            ledPrefs.begin("led-config", false);
-            ledPrefs.putInt("num_strips", numStrips);
-            ledPrefs.putInt("leds_per_strip", ledsPerStrip);
-            ledPrefs.end();
-
-            Logger.info("Saved LED config: %d strips, %d LEDs per strip", numStrips, ledsPerStrip);
-
-            request->send(200, "application/json", "{\"ok\":true}");
-
-            // Schedule restart — the Svelte client shows the "Restarting..." view.
-            extern bool g_restartRequested;
-            g_restartRequested = true;
-        } else {
-            request->send(400, "application/json", "{\"ok\":false,\"error\":\"Invalid LED configuration\"}");
-        }
-    });
-
-    // Settings: idle screensaver (enable + idle timeout). Applied live, no restart.
-    server_->on("/get-settings", HTTP_GET, [](AsyncWebServerRequest* request) {
-        bool enabled = g_uiManager ? g_uiManager->isScreensaverEnabled() : true;
-        uint32_t idleSec = g_uiManager ? g_uiManager->getScreensaverIdleMs() / 1000 : 30;
-
-        String json = "{";
-        json += "\"screensaverEnabled\":" + String(enabled ? "true" : "false") + ",";
-        json += "\"screensaverTimeoutSec\":" + String(idleSec);
-        json += "}";
-
-        request->send(200, "application/json", json);
-    });
-
-    server_->on("/save-settings", HTTP_POST, [](AsyncWebServerRequest* request) {
-        if (!g_uiManager) {
-            request->send(503, "application/json", "{\"ok\":false,\"error\":\"UI not ready\"}");
-            return;
-        }
-
-        // Default to the current values so a partial form doesn't clobber them.
-        bool enabled = g_uiManager->isScreensaverEnabled();
-        uint32_t idleSec = g_uiManager->getScreensaverIdleMs() / 1000;
-
-        if (request->hasParam("screensaver_enabled", true)) {
-            String v = request->getParam("screensaver_enabled", true)->value();
-            enabled = (v == "true" || v == "1" || v == "on");
-        }
-        if (request->hasParam("screensaver_timeout_sec", true)) {
-            idleSec = request->getParam("screensaver_timeout_sec", true)->value().toInt();
-        }
-
-        g_uiManager->setScreensaverConfig(enabled, idleSec * 1000);
-        request->send(200, "application/json", "{\"ok\":true}");
-    });
-
-    // Clear saved LED state (for testing first-boot experience)
-    server_->on("/clear-led-state", HTTP_POST, [](AsyncWebServerRequest* request) {
-        extern LEDManager* g_ledManager;
-        if (g_ledManager) {
-            g_ledManager->clearSavedState();
-        }
-
-        Logger.info("LED state preferences cleared via web UI");
-        request->send(200, "application/json", "{\"ok\":true}");
-    });
-
-    // Legacy get-message endpoint (mostly unused)
-    server_->on("/get-message", HTTP_GET, [](AsyncWebServerRequest* request) {
-        String response = "";
-        request->send(200, "application/json", response);
-    });
-}
-
-void WebUIManager::setupStaticFiles() {
-    // Svelte-built UI lives under /web/ and is gzipped. AsyncStaticWebHandler
-    // auto-detects .gz siblings, so a request for /app.js transparently serves
-    // /web/app.js.gz with Content-Encoding: gzip.
-    server_->serveStatic("/", LittleFS, "/web/").setDefaultFile("index.html");
-
-    // Cache the bundle aggressively — vite emits hash-free names but we control
-    // the rebuild via the firmware reflash, so a long max-age is safe.
-    // (Skipped: AsyncStaticWebHandler::setCacheControl would force a single value
-    //  for everything under /, including the standalone led-config pages.)
-}
-
 String WebUIManager::generateAnimationsResponse() {
     JsonDocument doc;
     doc["message"] = "animations";
     JsonArray animations = doc["animations"].to<JsonArray>();
 
-    for (int i = LEDManager::RAINBOW; i <= LEDManager::CONFETTI; i++) {
-        LEDManager::AnimationType current = static_cast<LEDManager::AnimationType>(i);
+    for (int i = 0; i < ANIMATION_COUNT; i++) {
+        AnimationType current = static_cast<AnimationType>(i);
         JsonObject anim = animations.add<JsonObject>();
-        anim["name"] = LEDManager::getAnimationDescription(current);
+        anim["name"] = animationDescription(current);
         anim["value"] = i;
     }
 
@@ -424,6 +273,7 @@ void WebUIManager::onWebSocketEvent(AsyncWebSocket* server, AsyncWebSocketClient
         case WS_EVT_DATA:
             handleWebSocketMessage(arg, data, len);
             break;
+        case WS_EVT_PING:
         case WS_EVT_PONG:
         case WS_EVT_ERROR:
             break;
@@ -482,7 +332,10 @@ void WebUIManager::handleColorMessage(const JsonDocument& request) {
         Logger.debug("Hex value: %s", hexValue.c_str());
         UiCommand cmd;
         cmd.type = UiCommandType::SetColour;
-        snprintf(cmd.colour, sizeof(cmd.colour), "%s", hexValue.c_str());
+        // cmd.colour is sized exactly for "#RRGGBB" + null. strlcpy is bounded and
+        // always null-terminates (and, unlike snprintf("%s"), doesn't trip
+        // -Wformat-truncation on the unbounded source string).
+        strlcpy(cmd.colour, hexValue.c_str(), sizeof(cmd.colour));
         g_uiManager->postUiCommand(cmd);
     }
 }

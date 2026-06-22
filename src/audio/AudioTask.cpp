@@ -1,23 +1,24 @@
-#include "AudioTask.h"
-#include "AudioBus.h"
-#include "AudioAnalyzer.h"
+#include "audio/AudioTask.h"
+#include "audio/AudioBus.h"
+#include "audio/AudioAnalyzer.h"
+#include "pins.h"
 #include <Arduino.h>
-#include <Filter.h>
+#include <audio/Filter.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <Logger.h>
 
 namespace {
 
-constexpr int NUM_BANDS = 7;
+constexpr int NUM_BANDS = AUDIO_BAND_COUNT;  // shared constant (see AudioFrame.h)
 constexpr uint32_t SAMPLE_PERIOD_MS = 5;  // ~200 Hz; held steady by vTaskDelayUntil
 
 TaskHandle_t s_audioTaskHandle = nullptr;
 
 void audioTask(void*) {
-    // MSGEQ7 wiring is settled on the WT32-SC01 Plus: strobe 13, reset 21,
-    // analog 12 (GPIO12 = ADC2 — shared with WiFi, see WIP ADC2 gotcha).
-    Analyzer analyzer(13, 21, 12);
+    // MSGEQ7 wiring (settled) — see pins.h. GPIO12 = ADC2 (WiFi-shared; the task
+    // is paused during OTA to avoid ADC2/WiFi contention).
+    Analyzer analyzer(pins::MSGEQ7_STROBE, pins::MSGEQ7_RESET, pins::MSGEQ7_ANALOG);
     analyzer.Init();
 
     // Filters live here now (one home — consumers must NOT re-filter). Weights

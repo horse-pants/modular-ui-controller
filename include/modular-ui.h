@@ -89,12 +89,19 @@
 
 // =============================================================================
 
-#include "LedHelpers.h"
+#include "led/LedHelpers.h"
+// LovyanGFX's auto-detect header defines some static helpers (e.g.
+// i2c_write_register8_array) that aren't used on every board, tripping
+// -Wunused-function under our src-scoped -Wextra. It's library code we don't own,
+// so silence it tightly around just this include rather than project-wide.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-function"
 #include <LovyanGFX.hpp>
+#pragma GCC diagnostic pop
 #include <lvgl.h>
 #include <lv_conf.h>
-#include "BrightnessSlider.h"
-#include "LEDManager.h"
+#include "ui/BrightnessSlider.h"
+#include "led/LEDManager.h"
 #include "WebUIManager.h"
 #include "WifiBootManager.h"
 

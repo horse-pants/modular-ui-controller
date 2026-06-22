@@ -24,7 +24,12 @@
       "WebFetch(domain:raw.githubusercontent.com)",
       "Read(//d/PlatformIO/Projects/EverythingControl/**)",
       "Read(//d/PlatformIO/Projects/EverythingControl-Peripheral/**)",
-      "WebFetch(domain:api.github.com)"
+      "WebFetch(domain:api.github.com)",
+      "Bash(set -e)",
+      "Bash(mkdir -p include/ui include/led/animations include/audio src/led/animations src/audio)",
+      "Bash(mv include/UIManager.h include/BrightnessSlider.h include/VuButton.h include/WhiteButton.h include/EffectsList.h include/ColourWheel.h include/VuGraph.h include/AudioVisualiser.h include/lv_colorwheel.h include/ui.h include/ui/)",
+      "Bash(mv include/LEDManager.h include/LedDriver.h include/LedHelpers.h include/Animations.h include/AnimationEngine.h include/led/)",
+      "Bash(mv include/animations/* include/led/animations/)"
     ],
     "deny": [],
     "ask": []

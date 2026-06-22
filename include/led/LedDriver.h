@@ -1,6 +1,6 @@
 #pragma once
 
-#include "LedHelpers.h"
+#include "led/LedHelpers.h"
 #include <led_strip.h>
 
 // Thin driver abstraction so animations / LEDManager don't depend on a

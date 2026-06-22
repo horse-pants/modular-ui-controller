@@ -3,7 +3,7 @@
 #include <lvgl.h>
 #include <Arduino.h>
 #include <memory>
-#include "VuGraph.h"
+#include "ui/VuGraph.h"
 
 /**
  * @brief Idle screensaver that shows the VU meter full-screen.

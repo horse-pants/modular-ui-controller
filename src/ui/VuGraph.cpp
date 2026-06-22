@@ -1,7 +1,7 @@
-#include "VuGraph.h"
+#include "ui/VuGraph.h"
 #include "modular-ui.h"
-#include "ui.h"
-#include "AudioBus.h"
+#include "ui/ui.h"
+#include "audio/AudioBus.h"
 
 VuGraph::VuGraph()
     : canvas_(nullptr)

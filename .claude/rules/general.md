@@ -30,16 +30,33 @@
 
 ## File organization
 
+Group files by **subsystem** into matching subfolders under both `include/` and
+`src/`. The two trees mirror each other, so a header at `include/<area>/Foo.h` has its
+implementation at `src/<area>/Foo.cpp`.
+
 ```
 include/
-  Feature.h           # Main class declaration
-  FeatureHelper.h     # Extracted helper declarations (if any)
+  ui/          # LVGL component classes (UIManager, ColourWheel, VuGraph, …) + ui.h
+  led/         # LED driver, manager, helpers, animation engine + catalog
+    animations/  # IAnimation, RenderContext, one <Name>Animation.h per animation
+  audio/       # analyzer, AudioBus/AudioFrame, audio task, Filter
+  modular-ui.h, lv_conf.h, UiCommand.h   # cross-cutting config / shared POD (root)
+  WebUIManager.h, WifiBootManager.h      # single-file subsystems (root)
 src/
-  Feature.cpp         # Main implementation
-  ui/Feature.cpp      # UI components live under src/ui/
+  ui/  led/  led/animations/  audio/     # mirror include/
+  main.cpp, WebUIManager.cpp, WifiBootManager.cpp   # root
 ```
 
-Headers live in a flat `include/` (no nested folders); implementations either at `src/` top-level or under `src/ui/` for LVGL components.
+Rules:
+- **Mirror the trees.** A new component goes in the same `<area>/` under both `include/`
+  and `src/`.
+- **Include with the area-qualified path** from outside the folder:
+  `#include "led/LEDManager.h"`, `#include "ui/VuGraph.h"`. Same-folder siblings may use a
+  bare name (`#include "IAnimation.h"` from within `led/animations/`).
+- **Root-level files** (`modular-ui.h`, `lv_conf.h`, `UiCommand.h`, the single-file
+  `WebUIManager`/`WifiBootManager` subsystems, `main.cpp`) are included bare.
+- A subsystem with many related files (like `led/animations/`, 15+ files) gets its own
+  nested subfolder — that's the whole point: no flat dumping-ground directories.
 
 ## Naming
 

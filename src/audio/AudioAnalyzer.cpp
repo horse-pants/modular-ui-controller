@@ -13,7 +13,7 @@ Improve the code to make it compatible with the Arduino IDE 1.0 or later
 Add optional analog pin
 */
 
-#include "AudioAnalyzer.h"
+#include "audio/AudioAnalyzer.h"
 #if defined(ARDUINO) && ARDUINO >= 100
 #include "Arduino.h"
 #else

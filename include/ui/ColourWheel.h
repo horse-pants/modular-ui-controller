@@ -6,7 +6,7 @@
 
 // If lv_colorwheel.h is in your lvgl tree, include it:
 extern "C" {
-#include "lv_colorwheel.h"
+#include "ui/lv_colorwheel.h"
 }
 
 /**

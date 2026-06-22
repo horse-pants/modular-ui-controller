@@ -8,13 +8,10 @@
 #include <freertos/task.h>
 #include <memory>
 #include "UiCommand.h"
-#include "BrightnessSlider.h"
-#include "ColourWheel.h"
-#include "EffectsList.h"
-#include "WhiteButton.h"
-#include "VuButton.h"
-#include "VuGraph.h"
-#include "AudioVisualiser.h"
+#include "ui/ColourTab.h"
+#include "ui/VuTab.h"
+#include "ui/AudioVisualiser.h"
+#include "ui/OtaScreen.h"
 
 /**
  * @brief Modern C++ class for managing the entire LVGL UI system
@@ -44,19 +41,14 @@ public:
      */
     ~UIManager();
 
-    /**
-     * @brief Move constructor
-     */
-    UIManager(UIManager&& other) noexcept;
-
-    /**
-     * @brief Move assignment operator
-     */
-    UIManager& operator=(UIManager&& other) noexcept;
-
-    // Disable copy operations to prevent resource issues
+    // Non-copyable and non-movable: a singleton owned via a global pointer in
+    // main.cpp, never moved. (It was previously movable with ~90 lines of
+    // hand-rolled move ops the comments themselves called "theoretical" — a
+    // running render task captures `this`, so moving it would dangle anyway.)
     UIManager(const UIManager&) = delete;
     UIManager& operator=(const UIManager&) = delete;
+    UIManager(UIManager&&) = delete;
+    UIManager& operator=(UIManager&&) = delete;
 
     /**
      * @brief Initialize the display and touch drivers
@@ -158,36 +150,6 @@ public:
     bool isInitialized() const { return initialized_; }
 
     /**
-     * @brief Get the brightness slider instance
-     */
-    BrightnessSlider* getBrightnessSlider() const { return brightnessSlider_.get(); }
-
-    /**
-     * @brief Get the colour wheel instance
-     */
-    ColourWheel* getColourWheel() const { return colourWheel_.get(); }
-
-    /**
-     * @brief Get the effects list instance
-     */
-    EffectsList* getEffectsList() const { return effectsList_.get(); }
-
-    /**
-     * @brief Get the white button instance
-     */
-    WhiteButton* getWhiteButton() const { return whiteButton_.get(); }
-
-    /**
-     * @brief Get the VU button instance
-     */
-    VuButton* getVuButton() const { return vuButton_.get(); }
-
-    /**
-     * @brief Get the VU graph instance
-     */
-    VuGraph* getVuGraph() const { return vuGraph_.get(); }
-
-    /**
      * @brief Configure the idle VU-meter screensaver (persisted to NVS).
      *
      * Safe to call from any task (e.g. the web handler on AsyncTCP): it only
@@ -222,40 +184,10 @@ public:
      */
     void hideOTAScreen();
 
-    /**
-     * @brief Create a styled panel container (hardware module look)
-     * @param parent Parent object
-     * @return Styled panel object
-     */
-    static lv_obj_t* createPanel(lv_obj_t* parent);
-
-    /**
-     * @brief Create a section label (e.g., "BRIGHTNESS", "COLOUR")
-     * @param parent Parent object
-     * @param text Label text
-     * @return Label object
-     */
-    static lv_obj_t* createSectionLabel(lv_obj_t* parent, const char* text);
-
 private:
-    // Shared styles (initialized once)
-    static lv_style_t stylePanelMain_;
-    static lv_style_t stylePanelInset_;
-    static lv_style_t styleSectionLabel_;
-    static bool stylesInitialized_;
-
-    /**
-     * @brief Initialize shared styles (called once)
-     */
-    static void initStyles();
-
-    // UI component instances using smart pointers
-    std::unique_ptr<BrightnessSlider> brightnessSlider_;
-    std::unique_ptr<ColourWheel> colourWheel_;
-    std::unique_ptr<EffectsList> effectsList_;
-    std::unique_ptr<WhiteButton> whiteButton_;
-    std::unique_ptr<VuButton> vuButton_;
-    std::unique_ptr<VuGraph> vuGraph_;
+    // Tab view components (each owns its widgets + layout) + the screensaver.
+    std::unique_ptr<ColourTab> colourTab_;
+    std::unique_ptr<VuTab> vuTab_;
     std::unique_ptr<AudioVisualiser> audioVisualiser_;
 
     // LVGL objects
@@ -263,17 +195,9 @@ private:
     lv_obj_t* tab1_;  // Colour tab
     lv_obj_t* tab2_;  // VU tab
 
-    // OTA screen objects (lv_* objects: only ever touched on the render task)
-    lv_obj_t* otaScreen_;
-    lv_obj_t* otaLabel_;
-    lv_obj_t* otaBar_;
-    // OTA flags: written from the AsyncTCP task (OTA progress callbacks during a
-    // web upload), read on the render task in update(). volatile so the reader
-    // always sees the latest value; aligned bool/uint8_t writes are atomic on
-    // ESP32, and a missed "changed" edge is caught on the next render tick.
-    volatile bool otaScreenActive_;
-    volatile uint8_t otaPendingProgress_;
-    volatile bool otaProgressChanged_;
+    // Full-screen OTA progress overlay (owns its own lv_* objects + cross-task
+    // flags; applied on the render task from update()).
+    OtaScreen otaScreen_;
 
     bool initialized_;
     bool screenInitialized_;
@@ -326,16 +250,6 @@ private:
      * @brief Load the idle-screensaver config from NVS into the runtime members.
      */
     void loadScreensaverConfig();
-
-    /**
-     * @brief Setup display driver
-     */
-    void setupDisplayDriver();
-
-    /**
-     * @brief Setup touch driver
-     */
-    void setupTouchDriver();
 
     /**
      * @brief Clean up all UI resources

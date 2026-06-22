@@ -1,6 +1,6 @@
 
-#include "BrightnessSlider.h"
-#include "ui.h"
+#include "ui/BrightnessSlider.h"
+#include "ui/ui.h"
 #include "modular-ui.h"
 
 // Static member definitions

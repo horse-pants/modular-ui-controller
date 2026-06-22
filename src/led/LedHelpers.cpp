@@ -1,4 +1,4 @@
-#include "LedHelpers.h"
+#include "led/LedHelpers.h"
 #include <esp_random.h>
 
 // Algorithms adapted from FastLED (MIT-licensed) — see LedHelpers.h header.

@@ -1,7 +1,7 @@
-#include "VuButton.h"
+#include "ui/VuButton.h"
 #include "modular-ui.h"
-#include "ui.h"
-#include "UIManager.h"
+#include "ui/ui.h"
+#include "ui/UIManager.h"
 
 VuButton::VuButton()
     : button_(nullptr)
@@ -130,12 +130,10 @@ void VuButton::handleStateChange() {
     currentState_ = !currentState_;
 
     // Call UIManager's simple helper
-    extern UIManager* g_uiManager;
     if (g_uiManager) {
         g_uiManager->logAndUpdateVuState(currentState_);
     } else {
         // Fallback if UIManager not available
-        extern LEDManager* g_ledManager;
         if (g_ledManager) {
             g_ledManager->setVuMode(currentState_);
         }

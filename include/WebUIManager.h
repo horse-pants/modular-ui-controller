@@ -71,10 +71,7 @@ private:
     bool initializeLittleFS();
     void writeEmbeddedFilesToFS();
     void initializeWebSocket();
-    void setupRoutes();
-    void setupAPIEndpoints();
-    void setupStaticFiles();
-    
+
     // WebSocket handling
     void handleWebSocketMessage(void* arg, uint8_t* data, size_t len);
     void onWebSocketEvent(AsyncWebSocket* server, AsyncWebSocketClient* client, 

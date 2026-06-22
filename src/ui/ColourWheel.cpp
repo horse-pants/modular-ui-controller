@@ -1,12 +1,10 @@
-#include "ColourWheel.h"
+#include "ui/ColourWheel.h"
 #include "modular-ui.h"
-#include "ui.h"
-#include "WhiteButton.h"
-#include "LEDManager.h"
+#include "ui/ui.h"
+#include "ui/WhiteButton.h"
+#include "led/LEDManager.h"
 
-// External references (g_whiteButton declared in ui.h)
-extern void updateWebUi();
-extern LEDManager* g_ledManager;
+// g_ledManager comes from led/LEDManager.h; updateWebUi() from modular-ui.h.
 
 ColourWheel::ColourWheel()
     : colorWheel_(nullptr)

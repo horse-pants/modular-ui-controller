@@ -1,7 +1,7 @@
-#include "EffectsList.h"
+#include "ui/EffectsList.h"
 #include "modular-ui.h"
-#include "ui.h"
-#include "WhiteButton.h"
+#include "ui/ui.h"
+#include "ui/WhiteButton.h"
 
 EffectsList::EffectsList()
     : dropdown_(nullptr)
@@ -187,10 +187,9 @@ void EffectsList::handleEffectChange() {
     int selectedEffect = getSelectedEffect();
 
     // Update LED manager state
-    extern LEDManager* g_ledManager;
     if (g_ledManager) {
         g_ledManager->setAnimationEnabled(true);
-        g_ledManager->setCurrentAnimation(static_cast<LEDManager::AnimationType>(selectedEffect));
+        g_ledManager->setCurrentAnimation(static_cast<AnimationType>(selectedEffect));
         g_ledManager->setWhiteMode(false);
     }
 
@@ -222,11 +221,11 @@ void EffectsList::cleanup() {
 String EffectsList::buildOptionsString() {
     String options;
 
-    for (int i = LEDManager::RAINBOW; i <= LEDManager::CONFETTI; i++) {
-        if (i > LEDManager::RAINBOW) {
+    for (int i = 0; i < ANIMATION_COUNT; i++) {
+        if (i > 0) {
             options.concat("\n");
         }
-        options.concat(LEDManager::getAnimationDescription(static_cast<LEDManager::AnimationType>(i)));
+        options.concat(animationDescription(static_cast<AnimationType>(i)));
     }
 
     return options;

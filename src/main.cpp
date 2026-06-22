@@ -1,9 +1,9 @@
 #include "modular-ui.h"
-#include "UIManager.h"
+#include "ui/UIManager.h"
 #include "WifiBootManager.h"
-#include "LEDManager.h"
+#include "led/LEDManager.h"
 #include "WebUIManager.h"
-#include "AudioTask.h"
+#include "audio/AudioTask.h"
 #include <OTAManager.h>
 #include <Logger.h>
 
