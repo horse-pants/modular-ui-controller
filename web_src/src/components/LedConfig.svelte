@@ -18,6 +18,17 @@
   let settingsStatus = 'idle';   // 'idle' | 'saving' | 'saved' | 'error'
   let settingsError = '';
 
+  // Home Assistant / MQTT broker settings (applied live, no restart).
+  let mqttEnabled = false;
+  let mqttHost = 'homeassistant.local';
+  let mqttPort = 1883;
+  let mqttUser = '';
+  let mqttPass = '';          // write-only: blank = keep existing on save
+  let mqttHasPass = false;    // whether the device already has a stored password
+  let mqttPrefix = 'modular-ui';
+  let mqttStatus = 'idle';       // 'idle' | 'saving' | 'saved' | 'error'
+  let mqttError = '';
+
   $: total = (parseInt(numStrips) || 0) * (parseInt(ledsPerStrip) || 0);
 
   onMount(async () => {
@@ -41,12 +52,52 @@
       if (typeof data.screensaverTimeoutSec === 'number') {
         screensaverTimeout = data.screensaverTimeoutSec;
       }
+      mqttEnabled = !!data.mqttEnabled;
+      if (typeof data.mqttHost === 'string') mqttHost = data.mqttHost;
+      if (typeof data.mqttPort === 'number') mqttPort = data.mqttPort;
+      if (typeof data.mqttUser === 'string') mqttUser = data.mqttUser;
+      mqttHasPass = !!data.mqttHasPass;
+      if (typeof data.mqttPrefix === 'string') mqttPrefix = data.mqttPrefix;
     } catch (e) {
       console.error('Failed to load settings:', e);
     } finally {
       settingsLoaded = true;
     }
   });
+
+  async function saveMqtt() {
+    mqttStatus = 'saving';
+    mqttError = '';
+    try {
+      const body = new URLSearchParams();
+      body.set('mqtt_enabled', mqttEnabled ? 'true' : 'false');
+      body.set('mqtt_host', mqttHost || '');
+      body.set('mqtt_port', String(parseInt(mqttPort) || 1883));
+      body.set('mqtt_user', mqttUser || '');
+      body.set('mqtt_pass', mqttPass || '');
+      body.set('mqtt_prefix', mqttPrefix || 'modular-ui');
+
+      const r = await fetch('/save-settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+
+      // Password is write-only — if one was just entered, it's now stored; clear the
+      // field so it isn't resubmitted and reflect that a password exists.
+      if (mqttPass.length > 0) {
+        mqttHasPass = true;
+        mqttPass = '';
+      }
+
+      mqttStatus = 'saved';
+      setTimeout(() => { if (mqttStatus === 'saved') mqttStatus = 'idle'; }, 2000);
+    } catch (e) {
+      mqttStatus = 'error';
+      mqttError = String(e.message || e);
+    }
+  }
 
   async function saveSettings() {
     settingsStatus = 'saving';
@@ -192,6 +243,69 @@
           <p class="ok">Saved &#10003;</p>
         {:else if settingsStatus === 'error'}
           <p class="error">Error: {settingsError}</p>
+        {/if}
+      {/if}
+    </section>
+
+    <section class="card">
+      <h3 class="section-title">Home Assistant (MQTT)</h3>
+      <p class="text-muted section-desc">
+        Expose the LEDs to Home Assistant via MQTT Discovery — no add-on or custom
+        integration needed. Point this at your broker; entities appear automatically.
+      </p>
+
+      {#if !settingsLoaded}
+        <p class="text-muted">Loading…</p>
+      {:else}
+        <div class="control row-control">
+          <label for="mqtt_enabled">Enabled</label>
+          <button id="mqtt_enabled"
+                  type="button"
+                  class="btn toggle"
+                  class:active={mqttEnabled}
+                  on:click={() => (mqttEnabled = !mqttEnabled)}>
+            {mqttEnabled ? 'On' : 'Off'}
+          </button>
+        </div>
+
+        {#if mqttEnabled}
+          <div class="control">
+            <label for="mqtt_host">Broker Host</label>
+            <input id="mqtt_host" type="text" bind:value={mqttHost}
+                   placeholder="homeassistant.local" autocomplete="off">
+          </div>
+          <div class="control">
+            <label for="mqtt_port">Port</label>
+            <input id="mqtt_port" type="number" min="1" max="65535" bind:value={mqttPort}>
+          </div>
+          <div class="control">
+            <label for="mqtt_user">Username</label>
+            <input id="mqtt_user" type="text" bind:value={mqttUser} autocomplete="off">
+          </div>
+          <div class="control">
+            <label for="mqtt_pass">Password</label>
+            <input id="mqtt_pass" type="password" bind:value={mqttPass}
+                   autocomplete="new-password"
+                   placeholder={mqttHasPass ? '•••••••• (leave blank to keep)' : 'Set a password'}>
+          </div>
+          <div class="control">
+            <label for="mqtt_prefix">Topic Prefix</label>
+            <input id="mqtt_prefix" type="text" bind:value={mqttPrefix}
+                   placeholder="modular-ui" autocomplete="off">
+          </div>
+        {/if}
+
+        <button type="button"
+                class="btn btn-primary"
+                disabled={mqttStatus === 'saving'}
+                on:click={saveMqtt}>
+          {mqttStatus === 'saving' ? 'Saving…' : 'Save'}
+        </button>
+
+        {#if mqttStatus === 'saved'}
+          <p class="ok">Saved &#10003;</p>
+        {:else if mqttStatus === 'error'}
+          <p class="error">Error: {mqttError}</p>
         {/if}
       {/if}
     </section>

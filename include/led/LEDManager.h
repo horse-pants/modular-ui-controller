@@ -44,9 +44,12 @@ public:
     void setBrightness(uint8_t newBrightness);
 
     /**
-     * @brief Perform startup fade-in sequence
+     * @brief Blocking boot animation: a diagonal rainbow-field "dispersion wipe"
+     *        (top-left → bottom-right across the strip grid) that then cross-fades
+     *        from the final dispersion frame into the saved state. Runs once in
+     *        setup() before the render task takes over LVGL.
      */
-    void performStartupFadeIn();
+    void performStartupDispersion();
 
     /**
      * @brief Show OTA update progress on LEDs

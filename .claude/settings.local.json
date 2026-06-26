@@ -29,7 +29,13 @@
       "Bash(mkdir -p include/ui include/led/animations include/audio src/led/animations src/audio)",
       "Bash(mv include/UIManager.h include/BrightnessSlider.h include/VuButton.h include/WhiteButton.h include/EffectsList.h include/ColourWheel.h include/VuGraph.h include/AudioVisualiser.h include/lv_colorwheel.h include/ui.h include/ui/)",
       "Bash(mv include/LEDManager.h include/LedDriver.h include/LedHelpers.h include/Animations.h include/AnimationEngine.h include/led/)",
-      "Bash(mv include/animations/* include/led/animations/)"
+      "Bash(mv include/animations/* include/led/animations/)",
+      "Bash(dir /s /b \"D:\\\\PlatformIO\\\\Projects\\\\modular-ui-controller\")",
+      "Bash(Get-ChildItem -Path \"D:\\\\PlatformIO\\\\Projects\\\\EverythingControl\" -Recurse -Name)",
+      "Bash(Select-Object -First 50)",
+      "Bash(findstr /R \"saveState\\\\|loadState\\\\|Preferences\" \"D:\\\\PlatformIO\\\\Projects\\\\modular-ui-controller\\\\src\\\\led\\\\LEDManager.cpp\")",
+      "Read(//d/PlatformIO/.platformio/packages/**)",
+      "Read(//d/PlatformIO/.platformio/packages/framework-arduinoespressif32/tools/**)"
     ],
     "deny": [],
     "ask": []

@@ -3,6 +3,7 @@
 #include "WifiBootManager.h"
 #include "led/LEDManager.h"
 #include "WebUIManager.h"
+#include "MqttManager.h"
 #include "audio/AudioTask.h"
 #include <OTAManager.h>
 #include <Logger.h>
@@ -13,6 +14,7 @@ extern LEDManager* g_ledManager;
 extern WebUIManager* g_webUIManager;
 extern WifiBootManager* g_wifiBootManager;
 extern OTAManager* g_otaManager;
+extern MqttManager* g_mqttManager;
 
 // Global restart flag for async operations
 bool g_restartRequested = false;
@@ -57,8 +59,13 @@ void setup()
 
     // Startup sequence (only if not in setup mode)
     if (g_ledManager) {
-        g_ledManager->performStartupFadeIn();
+        g_ledManager->performStartupDispersion();
         g_uiManager->syncWithLEDState();
+
+        // Home Assistant bridge — needs WiFi (connected in normal mode) and the
+        // LED manager. Skipped in captive-portal/setup mode along with the rest.
+        g_mqttManager = new MqttManager(g_ledManager);
+        g_mqttManager->begin();
     }
 
     // Hand LVGL ownership to the render task — only in normal mode, and only
@@ -97,6 +104,7 @@ void loop()
     if (g_wifiBootManager) g_wifiBootManager->update();
     if (g_ledManager) g_ledManager->update();
     if (g_webUIManager) g_webUIManager->update();
+    if (g_mqttManager) g_mqttManager->update();
     if (g_otaManager) g_otaManager->loop();
 
     // With the render task owning LVGL, the loop no longer blocks on the flush.

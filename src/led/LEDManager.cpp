@@ -1,4 +1,5 @@
 #include "led/LEDManager.h"
+#include "led/BootAnimation.h"
 #include "audio/AudioBus.h"
 #include "pins.h"
 #include <Logger.h>
@@ -133,56 +134,13 @@ void LEDManager::flashError() {
     errorFlashUntilMs_ = millis() + 1200;
 }
 
-void LEDManager::performStartupFadeIn() {
+void LEDManager::performStartupDispersion() {
     if (!initialized_ || !isConfigValid() || !leds_) {
         return;
     }
-
-    // Use saved brightness, minimum 1 for visibility during fade
-    uint8_t targetBrightness = brightness_;
-    if (targetBrightness < 1) {
-        targetBrightness = 1;
-    }
-
-    // Calculate delay to make fade take roughly the same time regardless of brightness
-    // Lower brightness = longer delay per step to maintain visible fade
-    int delayPerStep = max(5, 2000 / max((int)targetBrightness, 1));
-
-    // Determine what to show based on saved state
-    if (showAnimation_) {
-        // For animations: start animation immediately but fade in brightness
-        driver_.setBrightness(0);
-        for (int i = 0; i <= targetBrightness; i++) {
-            engine_.render(currentAnimation_);
-            driver_.setBrightness(i);
-            driver_.show(leds_);
-            delay(delayPerStep);
-        }
-    } else if (whiteMode_) {
-        // Fade in white
-        fillColor(CRGB::White);
-        for (int i = 0; i <= targetBrightness; i++) {
-            driver_.setBrightness(i);
-            driver_.show(leds_);
-            delay(delayPerStep);
-        }
-    } else {
-        // Fade in solid color (default to red if no color saved)
-        CRGB startupColor = solidColor_;
-        if (startupColor.r == 0 && startupColor.g == 0 && startupColor.b == 0) {
-            startupColor = CRGB::Red;  // Default to red for first boot
-        }
-        fillColor(startupColor);
-        for (int i = 0; i <= targetBrightness; i++) {
-            driver_.setBrightness(i);
-            driver_.show(leds_);
-            delay(delayPerStep);
-        }
-    }
-
-    // Ensure final brightness is exactly what was saved
-    driver_.setBrightness(brightness_);
-    driver_.show(leds_);
+    BootAnimation::runDispersion(driver_, engine_, leds_, numStrips_, ledsPerStrip_,
+                                 totalLeds_, brightness_, showAnimation_, whiteMode_,
+                                 currentAnimation_, solidColor_);
 }
 
 void LEDManager::setOTAMode(bool enabled) {
