@@ -163,6 +163,20 @@ public:
      */
     void setScreensaverConfig(bool enabled, uint32_t idleMs);
 
+    /**
+     * @brief Choose which visual the screensaver shows, and persist it.
+     *
+     * 0 is the VU meter; 1..N are the procedural scenes. Safe from any task: it
+     * only writes POD config + NVS. Swiping on the screensaver changes the live
+     * visual too, but does NOT persist — only this does.
+     */
+    void setScreensaverScene(int index);
+    int getScreensaverScene() const { return screensaverScene_; }
+
+    /// Names for the settings picker, in selection order.
+    int screensaverSceneCount() const;
+    const char* screensaverSceneName(int index) const;
+
     /** @brief Whether the idle screensaver is enabled. */
     bool isScreensaverEnabled() const { return screensaverEnabled_; }
 
@@ -216,6 +230,7 @@ private:
     // uint32_t accesses are atomic on ESP32, same pattern as the OTA flags.
     volatile bool screensaverEnabled_;
     volatile uint32_t screensaverIdleMs_;
+    volatile int screensaverScene_ = 0;
 
     // Cross-task UI command queue (producers: web handlers on AsyncTCP;
     // consumer: this manager's update() on the UI owner task)

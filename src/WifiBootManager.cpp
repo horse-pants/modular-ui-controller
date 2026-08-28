@@ -25,8 +25,27 @@ WifiBootManager::~WifiBootManager() {
     }
 }
 
+namespace {
+
+/// UI_COLOR_* are 0xRRGGBB; the library's web theme wants CSS strings. Formatted
+/// here rather than written out a second time by hand — the two copies had
+/// already drifted (the portal's background was #0a0a0a against the device's
+/// #0A0A0F, its border #444444 against #333340).
+String cssColor(uint32_t rgb) {
+    // Oversized: %06X takes an unsigned, so -Wformat-truncation assumes the
+    // worst case even though the mask bounds it to six digits.
+    char buf[16];
+    snprintf(buf, sizeof(buf), "#%06X", (unsigned)(rgb & 0xFFFFFFu));
+    return String(buf);
+}
+
+}  // namespace
+
 void WifiBootManager::initializeTheme() {
-    // LVGL colors (from modular-ui.h)
+    // Everything comes from modular-ui.h so the captive portal, the boot screen
+    // and the app UI are the same palette by construction (theming.md).
+
+    // LVGL boot screen.
     theme_.primaryColor = UI_COLOR_PRIMARY;
     theme_.backgroundColor = UI_COLOR_BACKGROUND;
     theme_.surfaceColor = UI_COLOR_SURFACE;
@@ -34,14 +53,20 @@ void WifiBootManager::initializeTheme() {
     theme_.textColor = UI_COLOR_TEXT;
     theme_.borderColor = UI_COLOR_BORDER;
 
-    // Web UI colors
-    theme_.webPrimaryColor = "#00D9FF";
-    theme_.webPrimaryDark = "#00B8E6";
-    theme_.webBackgroundColor = "#0a0a0a";
-    theme_.webSurfaceColor = "#1a1a1a";
-    theme_.webTextColor = "#e0e0e0";
-    theme_.webTextSecondary = "#b0b0b0";
-    theme_.webBorderColor = "#444444";
+    // Web pages (/setup, /update, /logs, /factory-reset).
+    theme_.webPrimaryColor = cssColor(UI_COLOR_PRIMARY);
+    theme_.webPrimaryDark = cssColor(UI_COLOR_PRIMARY_DARK);
+    theme_.webBackgroundColor = cssColor(UI_COLOR_BACKGROUND);
+    theme_.webSurfaceColor = cssColor(UI_COLOR_SURFACE);
+    theme_.webTextColor = cssColor(UI_COLOR_TEXT);
+    theme_.webTextSecondary = cssColor(UI_COLOR_TEXT_MUTED);
+    theme_.webBorderColor = cssColor(UI_COLOR_BORDER);
+
+    // The library's stylesheet also uses these two, which its named fields don't
+    // cover, so they stay its blue-grey defaults unless set here. cssVariables is
+    // the documented escape hatch; keys carry no leading "--".
+    theme_.cssVariables["surface-elevated"] = cssColor(UI_COLOR_SURFACE_LIGHT);
+    theme_.cssVariables["surface-sunken"] = cssColor(UI_COLOR_SURFACE_DARK);
 }
 
 void WifiBootManager::loadHostname() {

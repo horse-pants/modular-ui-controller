@@ -138,9 +138,22 @@ void WebApi::registerRoutes(AsyncWebServer* server) {
         // the UI can show a "leave blank to keep" affordance.
         bool mqttHasPass = g_mqttManager ? (g_mqttManager->pass().length() > 0) : false;
 
+        // Scene list comes from the device so the picker can't drift out of step
+        // with what is actually registered in ScenePlayer.
+        String scenes = "[";
+        const int sceneCount = g_uiManager ? g_uiManager->screensaverSceneCount() : 0;
+        for (int i = 0; i < sceneCount; i++) {
+            if (i) scenes += ",";
+            scenes += "\"" + jsonEscape(g_uiManager->screensaverSceneName(i)) + "\"";
+        }
+        scenes += "]";
+        const int sceneSel = g_uiManager ? g_uiManager->getScreensaverScene() : 0;
+
         String json = "{";
         json += "\"screensaverEnabled\":" + String(enabled ? "true" : "false") + ",";
         json += "\"screensaverTimeoutSec\":" + String(idleSec) + ",";
+        json += "\"screensaverScene\":" + String(sceneSel) + ",";
+        json += "\"screensaverScenes\":" + scenes + ",";
         json += "\"mqttEnabled\":" + String(mqttEnabled ? "true" : "false") + ",";
         json += "\"mqttHost\":\"" + jsonEscape(mqttHost) + "\",";
         json += "\"mqttPort\":" + String(mqttPort) + ",";
@@ -171,6 +184,11 @@ void WebApi::registerRoutes(AsyncWebServer* server) {
         }
 
         g_uiManager->setScreensaverConfig(enabled, idleSec * 1000);
+
+        if (request->hasParam("screensaver_scene", true)) {
+            g_uiManager->setScreensaverScene(
+                request->getParam("screensaver_scene", true)->value().toInt());
+        }
 
         // MQTT / Home Assistant broker config (applied live via a deferred restart
         // inside MqttManager). Only touched when the form submits the mqtt fields.

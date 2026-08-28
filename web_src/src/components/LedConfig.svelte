@@ -15,6 +15,10 @@
   // Screensaver settings (applied live, no restart).
   let screensaverEnabled = true;
   let screensaverTimeout = 30;
+  // Scene names come from the device, so this list can't drift out of step
+  // with what ScenePlayer actually has registered.
+  let screensaverScenes = [];
+  let screensaverScene = 0;
   let settingsLoaded = false;
   let settingsStatus = 'idle';   // 'idle' | 'saving' | 'saved' | 'error'
   let settingsError = '';
@@ -50,6 +54,12 @@
       const r = await fetch('/get-settings');
       const data = await r.json();
       screensaverEnabled = !!data.screensaverEnabled;
+      if (Array.isArray(data.screensaverScenes)) {
+        screensaverScenes = data.screensaverScenes;
+      }
+      if (typeof data.screensaverScene === 'number') {
+        screensaverScene = data.screensaverScene;
+      }
       if (typeof data.screensaverTimeoutSec === 'number') {
         screensaverTimeout = data.screensaverTimeoutSec;
       }
@@ -107,6 +117,7 @@
       const body = new URLSearchParams();
       body.set('screensaver_enabled', screensaverEnabled ? 'true' : 'false');
       body.set('screensaver_timeout_sec', String(parseInt(screensaverTimeout) || 30));
+      body.set('screensaver_scene', String(screensaverScene));
 
       const r = await fetch('/save-settings', {
         method: 'POST',
@@ -226,6 +237,21 @@
         </div>
 
         {#if screensaverEnabled}
+          {#if screensaverScenes.length}
+            <div class="control">
+              <label for="screensaver_scene">Visual</label>
+              <select id="screensaver_scene" bind:value={screensaverScene}>
+                {#each screensaverScenes as sceneName, i}
+                  <option value={i}>{sceneName}</option>
+                {/each}
+              </select>
+              <p class="text-muted hint">
+                Swiping left or right on the screensaver also switches visual, but
+                only this is remembered across a restart.
+              </p>
+            </div>
+          {/if}
+
           <div class="control">
             <label for="screensaver_timeout">Idle Timeout (seconds)</label>
             <input id="screensaver_timeout" type="number" min="5" max="600"
@@ -406,6 +432,12 @@
     font-size: 1rem;
     font-weight: 600;
     margin-bottom: 0.35rem;
+  }
+
+  .hint {
+    margin: 0.35rem 0 0;
+    font-size: 0.78rem;
+    line-height: 1.45;
   }
 
   .section-desc {

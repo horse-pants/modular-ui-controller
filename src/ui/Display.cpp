@@ -161,3 +161,25 @@ void Display::setupLvglTouch() {
 uint32_t Display::lastTouchMs() {
     return s_lastTouchMs;
 }
+
+void Display::beginDirect() {
+    lcd.startWrite();
+}
+
+void Display::pushStrip(int32_t y, int32_t height, const uint16_t* pixels) {
+    if (!pixels || height <= 0) return;
+    lcd.setAddrWindow(0, y, screenWidth, height);
+    // swap=true to match displayFlush(): the panel wants big-endian RGB565 and
+    // scenes build pixels in native order, exactly like LVGL's buffer.
+    lcd.pushPixels(const_cast<uint16_t*>(pixels), (uint32_t)screenWidth * height, true);
+
+    // Feed the mirror here too. While a scene owns the panel LVGL never flushes,
+    // so without this /screenshot.png returns whatever was on screen before the
+    // screensaver started — which is exactly when you most want a screenshot.
+    const lv_area_t area = { 0, y, (int32_t)screenWidth - 1, y + height - 1 };
+    ScreenMirror::blit(&area, reinterpret_cast<const uint8_t*>(pixels));
+}
+
+void Display::endDirect() {
+    lcd.endWrite();
+}

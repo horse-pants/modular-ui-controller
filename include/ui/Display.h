@@ -27,4 +27,18 @@ void setupLvglTouch();
 /// millis() timestamp of the last screen touch (drives the idle screensaver).
 uint32_t lastTouchMs();
 
+/**
+ * Direct panel access for the screensaver, which renders procedurally and
+ * pushes strips itself instead of going through LVGL (see ui/saver/ScenePlayer.h
+ * for why). Wrapped here rather than exposing the LovyanGFX device, so the panel
+ * stays owned by this module.
+ *
+ * Only legal from the render task, which is the only task that talks to the
+ * panel. Bracket pushes with beginDirect()/endDirect() so the bus transaction is
+ * held open across the whole frame.
+ */
+void beginDirect();
+void pushStrip(int32_t y, int32_t height, const uint16_t* pixels);
+void endDirect();
+
 }  // namespace Display

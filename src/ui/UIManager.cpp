@@ -457,13 +457,21 @@ void UIManager::loadScreensaverConfig() {
     prefs.begin("ui-settings", true);  // read-only
     screensaverEnabled_ = prefs.getBool("scrn_en", true);
     uint32_t idleSec = prefs.getUInt("scrn_sec", 30);
+    screensaverScene_ = prefs.getInt("scrn_scene", 1);   // default: first scene
     prefs.end();
 
     if (idleSec < 5) idleSec = 5;  // clamp to a sane minimum
     screensaverIdleMs_ = idleSec * 1000;
 
-    Logger.info("Screensaver: %s, idle %us",
-                screensaverEnabled_ ? "enabled" : "disabled", (unsigned)idleSec);
+    // Apply the saved choice now the visualiser exists (this runs after it is
+    // built in initializeComponents()).
+    if (audioVisualiser_) {
+        audioVisualiser_->setSelection(screensaverScene_);
+    }
+
+    Logger.info("Screensaver: %s, idle %us, scene %d (%s)",
+                screensaverEnabled_ ? "enabled" : "disabled", (unsigned)idleSec,
+                (int)screensaverScene_, screensaverSceneName(screensaverScene_));
 }
 
 void UIManager::setScreensaverConfig(bool enabled, uint32_t idleMs) {
@@ -480,6 +488,30 @@ void UIManager::setScreensaverConfig(bool enabled, uint32_t idleMs) {
 
     Logger.info("Screensaver config saved: %s, idle %ums",
                 enabled ? "enabled" : "disabled", (unsigned)idleMs);
+}
+
+void UIManager::setScreensaverScene(int index) {
+    if (index < 0) index = 0;
+    screensaverScene_ = index;
+
+    if (audioVisualiser_) {
+        audioVisualiser_->setSelection(index);
+    }
+
+    Preferences prefs;
+    prefs.begin("ui-settings", false);
+    prefs.putInt("scrn_scene", index);
+    prefs.end();
+
+    Logger.info("Screensaver scene saved: %d (%s)", index, screensaverSceneName(index));
+}
+
+int UIManager::screensaverSceneCount() const {
+    return audioVisualiser_ ? audioVisualiser_->selectionCount() : 0;
+}
+
+const char* UIManager::screensaverSceneName(int index) const {
+    return audioVisualiser_ ? audioVisualiser_->selectionName(index) : "none";
 }
 
 void UIManager::cleanup() {

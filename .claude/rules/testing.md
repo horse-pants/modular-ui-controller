@@ -1,5 +1,29 @@
 # Testing & Code Review
 
+## 🚨 Adding a file forces a FULL rebuild — batch them
+
+PlatformIO's `compute_project_checksum()` hashes the PIO Core version, `platformio.ini`, **and
+the sorted list of every `.c/.cc/.cpp/.h/.hpp/.s/.S` path under `include/`, `src/` and `lib/`**.
+Any mismatch and `clean_build_dir()` does `fs.rmtree(build_dir)` — the whole thing, all ~531
+LVGL objects included. That is a ~7 minute rebuild on this project.
+
+So a full rebuild is triggered by:
+
+- **adding or deleting any header/source** under `include/` or `src/` (the usual cause, and the
+  easiest to forget)
+- editing `platformio.ini`
+- editing `include/lv_conf.h` — this one is header dependencies, not the checksum, but it
+  rebuilds all of LVGL just the same
+
+Consequences for how to work:
+
+- **Batch new files into one pass.** Ten files added together cost one rebuild; ten files added
+  across ten turns cost ten.
+- **Batch `lv_conf.h` and `platformio.ini` edits** with each other and with file additions.
+- When the only change is added/removed files, the user can skip the wipe entirely:
+  `pio run --disable-auto-clean` (it bypasses `clean_build_dir`). Don't use it after a
+  `platformio.ini` or `lv_conf.h` change, which genuinely need the rebuild.
+
 ## After each change
 
 1. Build succeeds (user runs the build — see CLAUDE.md)
