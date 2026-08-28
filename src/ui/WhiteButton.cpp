@@ -65,7 +65,10 @@ bool WhiteButton::initialize(lv_obj_t* parent) {
         }
 
         // Size only - no positioning (parent layout handles it)
-        lv_obj_set_size(button_, UI_BTN_COMPACT_WIDTH + 10, UI_BTN_HEIGHT);
+        // Half the toggle row each, and tall enough to hit reliably — these
+        // were ~32px, below the comfortable minimum for a capacitive panel.
+        lv_obj_set_height(button_, UI_BTN_HEIGHT_LARGE);
+        lv_obj_set_flex_grow(button_, 1);
         lv_obj_add_flag(button_, LV_OBJ_FLAG_CHECKABLE);
 
         // Apply styling

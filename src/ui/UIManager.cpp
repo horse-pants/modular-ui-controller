@@ -10,7 +10,8 @@
 UIManager* g_uiManager = nullptr;
 BrightnessSlider* g_brightnessSlider = nullptr;
 ColourWheel* g_colourWheel = nullptr;
-EffectsList* g_effectsList = nullptr;
+EffectGrid* g_effectGrid = nullptr;
+ColourTab* g_colourTab = nullptr;
 WhiteButton* g_whiteButton = nullptr;
 VuButton* g_vuButton = nullptr;
 VuGraph* g_vuGraph = nullptr;
@@ -26,11 +27,13 @@ static uint32_t lvglTickCallback() {
 
 UIManager::UIManager()
     : colourTab_(nullptr)
+    , effectsTab_(nullptr)
     , vuTab_(nullptr)
     , audioVisualiser_(nullptr)
     , tabview_(nullptr)
     , tab1_(nullptr)
     , tab2_(nullptr)
+    , tab3_(nullptr)
     , initialized_(false)
     , screenInitialized_(false)
     , screensaverEnabled_(true)
@@ -105,6 +108,7 @@ bool UIManager::initializeUI() {
         }
         
         initialized_ = true;
+        logLvglMemory("after UI build");
         return true;
         
     } catch (...) {
@@ -113,9 +117,47 @@ bool UIManager::initializeUI() {
     }
 }
 
+// LVGL allocates objects, styles AND its draw layers from one fixed pool
+// (LV_MEM_SIZE). Overrunning it trips LV_ASSERT_MALLOC, whose handler is
+// `while(1)` — which halts the render task silently: no panic, no reboot, the
+// web server carries on, and the screen simply stops updating. That cost a long
+// debugging session once, so the headroom is logged rather than assumed.
+void UIManager::logLvglMemory(const char* when) {
+#if LV_USE_STDLIB_MALLOC == LV_STDLIB_BUILTIN
+    lv_mem_monitor_t mon;
+    lv_mem_monitor(&mon);
+    // max_used is the number that matters: the build-time figure misses the draw
+    // layers LVGL allocates while rendering, and those are what overran the pool.
+    // Free internal heap is here too because LV_MEM_SIZE is a static array — every
+    // KB given to LVGL is a KB taken from WiFi, AsyncTCP and MQTT.
+    Logger.info("LVGL heap %s: %u%% now, peak %u KB of %u KB, largest free %u KB, "
+                "frag %u%% | internal heap free %u KB",
+                when,
+                (unsigned)mon.used_pct,
+                (unsigned)(mon.max_used / 1024),
+                (unsigned)(mon.total_size / 1024),
+                (unsigned)(mon.free_biggest_size / 1024),
+                (unsigned)mon.frag_pct,
+                (unsigned)(ESP.getFreeHeap() / 1024));
+    if (mon.used_pct > 80) {
+        Logger.warning("LVGL heap above 80%% - raise LV_MEM_SIZE in include/lv_conf.h "
+                       "before adding more widgets");
+    }
+#else
+    (void)when;
+#endif
+}
+
 void UIManager::update() {
     if (!initialized_) {
         return;
+    }
+
+    // One-shot once everything has settled. The boot report is taken before the
+    // first frame, so it cannot show the render-time peak.
+    if (!heapSettledLogged_ && millis() > 20000) {
+        heapSettledLogged_ = true;
+        logLvglMemory("settled");
     }
 
     // Apply any UI mutations queued from other tasks (web handlers) before we
@@ -290,10 +332,12 @@ void UIManager::setAnimationState(bool newState) {
 
 void UIManager::setAnimation(int animation) {
     if (colourTab_) colourTab_->setAnimation(animation);
+    if (effectsTab_) effectsTab_->setSelected(animation);
 }
 
 void UIManager::syncWithLEDState() {
     if (colourTab_) colourTab_->syncWithLed();
+    if (effectsTab_) effectsTab_->syncWithLed();
 }
 
 void UIManager::applySynthTheme() {
@@ -328,17 +372,21 @@ bool UIManager::createTabview() {
     lv_obj_set_style_radius(tabview_, UI_RADIUS_MEDIUM, 0);
     lv_obj_add_flag(tabview_, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
 
-    // Create tabs (Effects moved to dropdown on Colour tab)
+    // Three tabs, one horizontal swipe apart. Effects has its own page now: as
+    // a dropdown on the Colour tab it was the loudest control on screen and the
+    // least used, and it left fifteen animations behind a scrolling word list.
     tab1_ = lv_tabview_add_tab(tabview_, "Colour");
-    tab2_ = lv_tabview_add_tab(tabview_, "VU");
+    tab2_ = lv_tabview_add_tab(tabview_, "Effects");
+    tab3_ = lv_tabview_add_tab(tabview_, "VU");
 
-    if (!tab1_ || !tab2_) {
+    if (!tab1_ || !tab2_ || !tab3_) {
         return false;
     }
 
     // Style individual tabs
     lv_obj_set_style_bg_color(tab1_, lv_color_hex(UI_COLOR_SURFACE), 0);
     lv_obj_set_style_bg_color(tab2_, lv_color_hex(UI_COLOR_SURFACE), 0);
+    lv_obj_set_style_bg_color(tab3_, lv_color_hex(UI_COLOR_SURFACE), 0);
     
     // === TAB BAR - Hardware selector style ===
     lv_obj_t* tab_bar = lv_tabview_get_tab_bar(tabview_);
@@ -376,9 +424,15 @@ bool UIManager::initializeComponents() {
         return false;
     }
 
+    // Effects tab — the animation picker.
+    effectsTab_ = std::make_unique<EffectsTab>();
+    if (!effectsTab_->build(tab2_)) {
+        return false;
+    }
+
     // VU meter tab.
     vuTab_ = std::make_unique<VuTab>();
-    if (!vuTab_->build(tab2_)) {
+    if (!vuTab_->build(tab3_)) {
         return false;
     }
 
@@ -448,6 +502,7 @@ void UIManager::cleanup() {
 
     tab1_ = nullptr;
     tab2_ = nullptr;
+    tab3_ = nullptr;
     initialized_ = false;
 }
 
@@ -457,6 +512,18 @@ void UIManager::scrollBeginEvent(lv_event_t* e) {
         lv_anim_t* a = (lv_anim_t*)lv_event_get_param(e);
         if (a) lv_anim_set_duration(a, 0);
     }
+}
+
+void UIManager::showEffectsTab() {
+    if (!tabview_) return;
+
+    // LV_ANIM_OFF is load-bearing, not a style choice. On LV_EVENT_SCROLL_END the
+    // tabview recomputes which tab is active from the content's LIVE scroll
+    // position (lv_tabview.c: `t = (p.x + w / 2) / w`). An animated scroll leaves
+    // that position at the old tab for the whole animation, so any SCROLL_END
+    // landing in that window resolves back to the tab we just left — the switch
+    // visibly happens and then flicks back. Jumping outright closes the window.
+    lv_tabview_set_active(tabview_, 1, LV_ANIM_OFF);
 }
 
 void UIManager::showOTAScreen() {

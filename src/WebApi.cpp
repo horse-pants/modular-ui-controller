@@ -1,9 +1,9 @@
 #include "WebApi.h"
 
-#include <LittleFS.h>
 #include <WiFi.h>
 #include <Preferences.h>
 #include <Logger.h>
+#include "WebAssets.h"
 #include "diag/ScreenshotRoute.h"
 #include "led/LEDManager.h"
 #include "ui/UIManager.h"
@@ -36,6 +36,25 @@ static String jsonEscape(const String& in) {
     return out;
 }
 
+namespace {
+
+// Streams one embedded asset. AsyncProgmemResponse keeps only the pointer, so
+// nothing is copied out of flash into RAM.
+void sendAsset(AsyncWebServerRequest* request, const WebAssets::Asset* asset) {
+    if (!asset) {
+        request->send(404, "text/plain", "Not found");
+        return;
+    }
+    AsyncWebServerResponse* response =
+        request->beginResponse(200, asset->contentType, asset->data, asset->len);
+    if (asset->gzip) {
+        response->addHeader("Content-Encoding", "gzip");
+    }
+    request->send(response);
+}
+
+}  // namespace
+
 void WebApi::registerRoutes(AsyncWebServer* server) {
     Logger.debug("=== WebApi: Setting up routes ===");
 
@@ -46,11 +65,11 @@ void WebApi::registerRoutes(AsyncWebServer* server) {
         request->send(200, "text/plain", "Server is working! IP: " + WiFi.localIP().toString());
     });
 
-    // LED Configuration page — served by the Svelte SPA. We send the gzipped
-    // index.html and let the Svelte router show the LedConfig view based on
-    // window.location.pathname. AsyncFileResponse auto-detects the .gz sibling.
+    // LED Configuration page — served by the Svelte SPA. We send index.html and
+    // let the Svelte router show the LedConfig view based on
+    // window.location.pathname.
     server->on("/led-config", HTTP_GET, [](AsyncWebServerRequest* request) {
-        request->send(LittleFS, "/web/index.html", "text/html");
+        sendAsset(request, WebAssets::find("/index.html"));
     });
 
     server->on("/get-led-config", HTTP_GET, [](AsyncWebServerRequest* request) {
@@ -202,11 +221,20 @@ void WebApi::registerRoutes(AsyncWebServer* server) {
     // static wildcard below.
     ScreenshotRoute::registerRoutes(server);
 
-    // Svelte-built UI lives under /web/ and is gzipped. AsyncStaticWebHandler
-    // auto-detects .gz siblings, so a request for /app.js transparently serves
-    // /web/app.js.gz with Content-Encoding: gzip. Root (/) falls back to
-    // index.html. Registered last so the specific routes above win.
-    server->serveStatic("/", LittleFS, "/web/").setDefaultFile("index.html");
+    // The Svelte bundle is linked into the firmware (see include/WebAssets.h), so
+    // it is served from flash rather than a filesystem. One route per asset
+    // instead of a wildcard on purpose: an unmatched URL has to keep falling
+    // through to the WiFi library's onNotFound, which redirects to /setup and is
+    // what makes the captive portal work. WebApi's routes are registered in
+    // captive mode too.
+    for (size_t i = 0; i < WebAssets::count(); ++i) {
+        const WebAssets::Asset* asset = WebAssets::at(i);
+        server->on(asset->path, HTTP_GET, [asset](AsyncWebServerRequest* request) {
+            sendAsset(request, asset);
+        });
+    }
+    Logger.debug("WebApi: %u embedded assets served from flash",
+                 (unsigned)WebAssets::count());
 
     Logger.debug("=== WebApi: Routes setup complete ===");
 }

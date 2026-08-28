@@ -1,6 +1,8 @@
 # Name,   Type, SubType, Offset,  Size, Flags
+# No data partition: the web UI is linked into the firmware (include/WebAssets.h)
+# and settings live in NVS, so nothing on the device reads a filesystem. The 3 MB
+# that spiffs used to hold now goes to the two app slots.
 nvs,      data, nvs,     0x9000,  0x5000,
 otadata,  data, ota,     0xe000,  0x2000,
-app0,     app,  ota_0,   0x10000, 0x280000,
-app1,     app,  ota_1,   0x290000,0x280000,
-spiffs,   data, spiffs,  0x510000,0x2F0000,
+app0,     app,  ota_0,   0x10000, 0x3F0000,
+app1,     app,  ota_1,   0x400000,0x3F0000,

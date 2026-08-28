@@ -31,7 +31,9 @@ export default defineConfig({
     }
   },
   build: {
-    outDir: '../data/web',
+    // build_web.py picks these up and embeds them in the firmware image
+    // (see include/WebAssets.h) - nothing is flashed to a filesystem any more.
+    outDir: 'dist',
     emptyOutDir: true,
     // Single JS/CSS bundles — no chunking. LittleFS images do better with fewer files.
     rollupOptions: {

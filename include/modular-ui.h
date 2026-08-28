@@ -30,6 +30,7 @@
 #define UI_COLOR_SURFACE        0x15151F    // Panel/card surface
 #define UI_COLOR_SURFACE_LIGHT  0x252530    // Lighter surface (hover states)
 #define UI_COLOR_SURFACE_DARK   0x0D0D12    // Darker inset areas
+#define UI_COLOR_SURFACE_ACTIVE 0x123039    // Cyan-tinted fill behind an active control
 
 // Borders & dividers
 #define UI_COLOR_BORDER         0x333340    // Default border
@@ -85,7 +86,13 @@
 #define UI_BTN_HEIGHT           36
 #define UI_BTN_HEIGHT_SMALL     30
 #define UI_BTN_MIN_WIDTH        80
-#define UI_BTN_COMPACT_WIDTH    56      // Narrow buttons (VU, WHITE)
+#define UI_BTN_HEIGHT_LARGE     54      // Primary touch targets (WHITE/VU pills)
+
+// Effect grid (Effects tab)
+#define UI_TILE_HEIGHT          72      // One animation tile
+#define UI_TILE_STRIP_HEIGHT    6       // Colour signature across the tile top
+#define UI_SEG_HEIGHT           32      // Patterns / Audio segmented control
+#define UI_OFFBAR_HEIGHT        34      // "EFFECTS OFF" bar
 
 // =============================================================================
 

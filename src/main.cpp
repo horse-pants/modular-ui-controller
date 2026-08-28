@@ -7,6 +7,7 @@
 #include "audio/AudioTask.h"
 #include <OTAManager.h>
 #include <Logger.h>
+#include <esp_system.h>
 
 // Global manager instances
 extern UIManager* g_uiManager;
@@ -15,6 +16,25 @@ extern WebUIManager* g_webUIManager;
 extern WifiBootManager* g_wifiBootManager;
 extern OTAManager* g_otaManager;
 extern MqttManager* g_mqttManager;
+
+// Why the last boot happened. On an unexplained reboot this one line separates a
+// firmware panic from a task watchdog from a brownout (145 LEDs can pull enough
+// to sag a weak supply) — guessing between those costs far more than logging it.
+static const char* resetReasonName(esp_reset_reason_t reason) {
+    switch (reason) {
+        case ESP_RST_POWERON:   return "power-on";
+        case ESP_RST_EXT:       return "external pin";
+        case ESP_RST_SW:        return "software restart";
+        case ESP_RST_PANIC:     return "PANIC / exception";
+        case ESP_RST_INT_WDT:   return "interrupt watchdog";
+        case ESP_RST_TASK_WDT:  return "task watchdog";
+        case ESP_RST_WDT:       return "other watchdog";
+        case ESP_RST_DEEPSLEEP: return "deep sleep wake";
+        case ESP_RST_BROWNOUT:  return "BROWNOUT (supply sag)";
+        case ESP_RST_SDIO:      return "SDIO";
+        default:                return "unknown";
+    }
+}
 
 // Global restart flag for async operations
 bool g_restartRequested = false;
@@ -28,6 +48,7 @@ void setup()
     // Initialize logger early
     Logger.begin(200, true, true);
     Logger.info("ModularUI Controller Starting...");
+    Logger.info("Reset reason: %s", resetReasonName(esp_reset_reason()));
 
     // PSRAM diagnostic — the full-screen visualiser canvas needs it. If found=0
     // here, the platformio.ini memory_type doesn't match the module's PSRAM.

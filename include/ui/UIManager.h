@@ -9,6 +9,7 @@
 #include <memory>
 #include "UiCommand.h"
 #include "ui/ColourTab.h"
+#include "ui/EffectsTab.h"
 #include "ui/VuTab.h"
 #include "ui/AudioVisualiser.h"
 #include "ui/OtaScreen.h"
@@ -169,6 +170,11 @@ public:
     uint32_t getScreensaverIdleMs() const { return screensaverIdleMs_; }
 
     /**
+     * @brief Bring the Effects tab to the front (the Colour tab's effect bar).
+     */
+    void showEffectsTab();
+
+    /**
      * @brief Show OTA update screen
      */
     void showOTAScreen();
@@ -187,13 +193,15 @@ public:
 private:
     // Tab view components (each owns its widgets + layout) + the screensaver.
     std::unique_ptr<ColourTab> colourTab_;
+    std::unique_ptr<EffectsTab> effectsTab_;
     std::unique_ptr<VuTab> vuTab_;
     std::unique_ptr<AudioVisualiser> audioVisualiser_;
 
     // LVGL objects
     lv_obj_t* tabview_;
     lv_obj_t* tab1_;  // Colour tab
-    lv_obj_t* tab2_;  // VU tab
+    lv_obj_t* tab2_;  // Effects tab
+    lv_obj_t* tab3_;  // VU tab
 
     // Full-screen OTA progress overlay (owns its own lv_* objects + cross-task
     // flags; applied on the render task from update()).
@@ -220,6 +228,12 @@ private:
      * @brief FreeRTOS entry point: loops update() on the render task
      */
     static void renderTaskTrampoline(void* arg);
+
+    /// Report LVGL's pool usage. See the definition for why this is not optional.
+    static void logLvglMemory(const char* when);
+
+    /// One-shot guard for the post-settle heap report in update().
+    bool heapSettledLogged_ = false;
 
     /**
      * @brief Drain and apply all queued UI commands (called from update())

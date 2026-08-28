@@ -31,10 +31,40 @@ for (uint32_t i = 0; i < lv_obj_get_child_count(tab_bar); i++) {
 }
 ```
 
-## Dropdown lists
+## 🚨 LVGL's heap is fixed, and running out halts the render task SILENTLY
 
-- The dropdown list widget **doesn't exist until the dropdown is opened.** Style it from the `LV_EVENT_READY` / open handler — not at construction time.
-- Use `lv_obj_set_scroll_dir(list, LV_DIR_VER)` to constrain dropdown scroll to vertical only.
+`LV_USE_STDLIB_MALLOC` is `LV_STDLIB_BUILTIN`, so objects, styles **and draw layers** all come
+from one fixed pool (`LV_MEM_SIZE` in `include/lv_conf.h`). When it runs out,
+`LV_USE_ASSERT_MALLOC` fires and `LV_ASSERT_HANDLER` is `while(1);` — the calling task spins
+forever.
+
+What that looks like, because it looks like nothing:
+
+- **No panic, no reboot, no serial output.** Only the render task dies.
+- The web server keeps answering (AsyncTCP is a different task), but nothing you click does
+  anything, because `UIManager::update()` never runs again to drain the UI command queue.
+- `/screenshot.png` still works and shows the frame **half-drawn** — LVGL flushes in strips
+  top-to-bottom, so you get new pixels above the point it died and the previous screen below.
+
+Rules:
+
+- **Check the heap after adding widgets.** `UIManager::logLvglMemory()` logs used/free/largest/
+  fragmentation on every boot and warns past 80%. Read it before assuming there's room.
+- **Object count matters more than it looks.** The effects grid is 15 tiles x 3 objects; that
+  alone plus its containers overran a 64 KB pool and caused exactly the hang above.
+- `LV_USE_LOG` is now `1` with `LV_LOG_PRINTF 1`, so a future assert at least prints to serial.
+  Don't turn it back off.
+
+## Tabs and swipe
+
+Three tabs — Colour, Effects, VU — and the tabview swipes horizontally between them for
+free. Two things have to hold for that to keep working:
+
+- **Anything scrollable inside a tab must be `LV_DIR_VER` only** (`lv_obj_set_scroll_dir`),
+  or it eats the horizontal drag and the tab never changes.
+- **The colour wheel needs its scroll guard.** It reports on `PRESSING`/`RELEASED` and checks
+  `lv_indev_get_scroll_obj()`, which is what stops a swipe that starts on the wheel from also
+  setting a colour. See the Colour wheel section.
 
 ## Colour wheel
 
@@ -59,7 +89,12 @@ saturation, value pinned at full. Things that are easy to break:
 ## Active-state visuals
 
 - **Thick bright borders mark "active"**, not shadows or glow effects. The hardware doesn't render box shadows / blur effectively, so reach for a border-width + border-color change instead.
-- Effects dropdown convention: cyan border when an animation is active; dimmed when colour/white modes are active.
+- Applied everywhere: the selected effect tile, the Colour tab's effect bar, and the White/VU pills all use a cyan `LV_STATE_CHECKED` border, pre-set at build time and toggled with `lv_obj_add_state()`.
+- **Always set `bg_color` for `LV_STATE_CHECKED`, even when you only want the border to change.**
+  Any state property you leave unset falls through to LVGL's default theme, whose secondary
+  colour is RED — the effect bar shipped bright red for exactly this reason. Set
+  `bg_color` + `bg_opa` alongside `border_color`, and use `UI_COLOR_SURFACE_ACTIVE` when the
+  intent is "same surface, just highlighted".
 
 ## Event handlers
 

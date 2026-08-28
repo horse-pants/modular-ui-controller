@@ -7,7 +7,8 @@
     brightness,
     route, pathToRoute, navigate
   } from './stores.js';
-  import ColorPicker from './components/ColorPicker.svelte';
+  import ColourWheel from './components/ColourWheel.svelte';
+  import EffectGrid from './components/EffectGrid.svelte';
   import ThemeToggle from './components/ThemeToggle.svelte';
   import LedConfig from './components/LedConfig.svelte';
 
@@ -45,11 +46,12 @@
     animationEnabled.set(false);
   }
 
-  function onAnimationChange(e) {
-    const v = parseInt(e.target.value);
+  function onEffectSelect(e) {
+    const v = e.detail;
     animationValue.set(v);
     if (v > -1) {
       animationEnabled.set(true);
+      white.set(false);
       wsSend.animation(true, v);
     } else {
       animationEnabled.set(false);
@@ -87,49 +89,33 @@
     </header>
 
     <section class="card">
-      <div class="row">
-        <div class="control">
-          <label for="colour-picker">Colour</label>
-          <ColorPicker id="colour-picker" value={$colour} on:change={onColourChange} />
+      <ColourWheel id="colour-wheel" value={$colour} on:change={onColourChange} />
+
+      <div class="control full bright">
+        <div class="bright-head">
+          <label for="brightness">Brightness</label>
+          <span class="bright-val">{Math.round(($brightness / 255) * 100)}%</span>
         </div>
-
-        <div class="control">
-          <label for="white-toggle">White</label>
-          <button type="button" id="white-toggle" class="btn toggle" class:active={$white} on:click={toggleWhite}>
-            {$white ? 'On' : 'Off'}
-          </button>
-        </div>
-
-        <div class="control">
-          <label for="vu-toggle">VU</label>
-          <button type="button" id="vu-toggle" class="btn toggle" class:active={$vu} on:click={toggleVu}>
-            {$vu ? 'On' : 'Off'}
-          </button>
-        </div>
-      </div>
-
-      <div class="control full">
-        <label for="animation">Animation</label>
-        <select id="animation"
-                class:active={$animationEnabled}
-                value={$animationValue}
-                on:change={onAnimationChange}>
-          <option value={-1}>None</option>
-          {#each $animations as anim}
-            <option value={anim.value}>{anim.name}</option>
-          {/each}
-        </select>
-      </div>
-
-      <div class="control full">
-        <label for="brightness">Brightness</label>
         <input id="brightness"
                type="range" min="0" max="255"
                value={$brightness}
                on:input={onBrightnessInput}
                on:change={onBrightnessChange}>
       </div>
+
+      <div class="row pills">
+        <button type="button" class="btn toggle pill" class:active={$white} on:click={toggleWhite}>
+          White
+        </button>
+        <button type="button" class="btn toggle pill" class:active={$vu} on:click={toggleVu}>
+          VU
+        </button>
+      </div>
     </section>
+
+    <EffectGrid animations={$animations}
+                selected={$animationEnabled ? $animationValue : -1}
+                on:select={onEffectSelect} />
 
     <nav>
       <a href="/update">Update</a>
@@ -177,11 +163,6 @@
     gap: 0.45rem;
   }
 
-  .row .control {
-    flex: 1;
-    min-width: 0;
-  }
-
   .control.full {
     width: 100%;
     margin-bottom: 1rem;
@@ -195,10 +176,30 @@
     width: 100%;
   }
 
-  select.active {
-    border-color: var(--primary);
-    color: var(--primary);
-    box-shadow: 0 0 0 1px var(--primary-glow);
+  /* Brightness: caption and live percentage on one line above the track, the
+     same as the device's card. */
+  .bright { margin-top: 1.1rem; }
+
+  .bright-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+  }
+
+  .bright-val {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* White / VU: two equal, thumb-sized pills. */
+  .pills { margin-bottom: 0; }
+
+  .pill {
+    flex: 1;
+    min-height: 48px;
+    font-weight: 600;
   }
 
   nav {
@@ -229,6 +230,5 @@
   @media (max-width: 480px) {
     main { padding: 1rem 0.75rem; }
     .row { flex-wrap: wrap; }
-    .row .control { min-width: calc(50% - 0.5rem); }
   }
 </style>

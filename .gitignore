@@ -3,3 +3,9 @@
 .vscode/c_cpp_properties.json
 .vscode/launch.json
 .vscode/ipch
+
+# Web UI bundle: built by build_web.py and linked into the firmware image
+# (see include/WebAssets.h). Both are regenerated from web_src/ on every build.
+web_src/node_modules
+web_src/dist
+src/generated/

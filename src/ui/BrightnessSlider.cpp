@@ -9,7 +9,8 @@ lv_style_t BrightnessSlider::knobStyle_;
 bool BrightnessSlider::stylesInitialized_ = false;
 
 BrightnessSlider::BrightnessSlider(int maxBrightness)
-    : slider_(nullptr)
+    : card_(nullptr)
+    , slider_(nullptr)
     , label_(nullptr)
     , parentTab_(nullptr)
     , initialized_(false)
@@ -24,7 +25,8 @@ BrightnessSlider::~BrightnessSlider() {
 }
 
 BrightnessSlider::BrightnessSlider(BrightnessSlider&& other) noexcept
-    : slider_(other.slider_)
+    : card_(other.card_)
+    , slider_(other.slider_)
     , label_(other.label_)
     , parentTab_(other.parentTab_)
     , initialized_(other.initialized_)
@@ -56,6 +58,7 @@ BrightnessSlider& BrightnessSlider::operator=(BrightnessSlider&& other) noexcept
         callback_ = std::move(other.callback_);
         
         // Reset the moved-from object
+        other.card_ = nullptr;
         other.slider_ = nullptr;
         other.label_ = nullptr;
         other.parentTab_ = nullptr;
@@ -76,17 +79,17 @@ void BrightnessSlider::initializeStyles() {
     lv_style_set_bg_opa(&indicatorStyle_, LV_OPA_COVER);
     lv_style_set_bg_color(&indicatorStyle_, lv_color_hex(UI_COLOR_PRIMARY));
     lv_style_set_bg_grad_color(&indicatorStyle_, lv_color_hex(UI_COLOR_PRIMARY_DARK));
-    lv_style_set_bg_grad_dir(&indicatorStyle_, LV_GRAD_DIR_VER);
-    lv_style_set_radius(&indicatorStyle_, UI_RADIUS_SMALL);
+    lv_style_set_bg_grad_dir(&indicatorStyle_, LV_GRAD_DIR_HOR);
+    lv_style_set_radius(&indicatorStyle_, LV_RADIUS_CIRCLE);
 
     // === KNOB STYLE - High contrast, visible knob ===
     lv_style_init(&knobStyle_);
     lv_style_set_bg_color(&knobStyle_, lv_color_hex(UI_COLOR_WHITE));
     lv_style_set_bg_grad_color(&knobStyle_, lv_color_hex(UI_COLOR_TEXT));
     lv_style_set_bg_grad_dir(&knobStyle_, LV_GRAD_DIR_VER);
-    lv_style_set_radius(&knobStyle_, UI_RADIUS_SMALL);
-    lv_style_set_width(&knobStyle_, 44);
-    lv_style_set_height(&knobStyle_, 16);
+    lv_style_set_radius(&knobStyle_, LV_RADIUS_CIRCLE);
+    lv_style_set_width(&knobStyle_, 28);
+    lv_style_set_height(&knobStyle_, 28);
     lv_style_set_border_color(&knobStyle_, lv_color_hex(UI_COLOR_PRIMARY));
     lv_style_set_border_width(&knobStyle_, UI_BORDER_NORMAL);
 
@@ -94,25 +97,58 @@ void BrightnessSlider::initializeStyles() {
 }
 
 void BrightnessSlider::createLabel() {
-    // Label created separately - parent container handles it for vertical layout
-    label_ = nullptr;
+    // A card, so the caption, the percentage and the track read as one control.
+    card_ = lv_obj_create(parentTab_);
+    lv_obj_set_size(card_, LV_PCT(100), LV_SIZE_CONTENT);
+    lv_obj_set_flex_flow(card_, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_bg_color(card_, lv_color_hex(UI_COLOR_SURFACE_LIGHT), 0);
+    lv_obj_set_style_border_color(card_, lv_color_hex(UI_COLOR_BORDER), 0);
+    lv_obj_set_style_border_width(card_, UI_BORDER_THIN, 0);
+    lv_obj_set_style_radius(card_, UI_RADIUS_MEDIUM, 0);
+    lv_obj_set_style_pad_all(card_, UI_PADDING_MEDIUM, 0);
+    lv_obj_set_style_pad_row(card_, UI_PADDING_SMALL, 0);
+    lv_obj_remove_flag(card_, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_t* header = lv_obj_create(card_);
+    lv_obj_set_size(header, LV_PCT(100), LV_SIZE_CONTENT);
+    lv_obj_set_flex_flow(header, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(header, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER,
+                          LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_bg_opa(header, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(header, 0, 0);
+    lv_obj_set_style_pad_all(header, 0, 0);
+    lv_obj_remove_flag(header, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_t* caption = lv_label_create(header);
+    lv_label_set_text(caption, "BRIGHTNESS");
+    lv_obj_set_style_text_color(caption, lv_color_hex(UI_COLOR_TEXT_MUTED), 0);
+
+    label_ = lv_label_create(header);
+    lv_obj_set_style_text_color(label_, lv_color_hex(UI_COLOR_TEXT), 0);
+    lv_label_set_text(label_, "0%");
+}
+
+void BrightnessSlider::updateValueLabel() {
+    if (!label_ || maxBrightness_ <= 0) return;
+    // Rounded, so dragging to either end reads a clean 0% / 100%.
+    const int pct = (currentBrightness_ * 100 + maxBrightness_ / 2) / maxBrightness_;
+    lv_label_set_text_fmt(label_, "%d%%", pct);
 }
 
 void BrightnessSlider::createSlider() {
-    slider_ = lv_slider_create(parentTab_);
+    slider_ = lv_slider_create(card_);
     if (slider_) {
-        // Vertical fader: height > width
-        // Track is narrow but we add padding for touch area
-        lv_obj_set_width(slider_, 24);
-        lv_obj_set_height(slider_, 200);
+        // Horizontal fader across the card.
+        lv_obj_set_width(slider_, LV_PCT(100));
+        lv_obj_set_height(slider_, 22);
         lv_slider_set_range(slider_, 0, maxBrightness_);
 
-        // Extend draw area so knob isn't clipped at top/bottom
-        lv_obj_set_style_pad_top(slider_, 20, 0);
-        lv_obj_set_style_pad_bottom(slider_, 8, 0);
+        // The round knob overhangs the track ends; this keeps it unclipped.
+        lv_obj_set_style_pad_hor(slider_, 4, 0);
 
-        // Wider touch/click area (extends beyond visible track)
-        lv_obj_set_ext_click_area(slider_, 20);
+        // Taller touch area than the track, so a slightly high or low thumb
+        // still lands on it.
+        lv_obj_set_ext_click_area(slider_, 14);
 
         // Set user data to this instance for event handling
         lv_obj_set_user_data(slider_, this);
@@ -154,6 +190,7 @@ void BrightnessSlider::handleSliderEvent(lv_event_t* e) {
     
     int sliderValue = static_cast<int>(lv_slider_get_value(slider_));
     currentBrightness_ = sliderValue;
+    updateValueLabel();
     
     // Call the callback if set
     if (callback_) {
@@ -209,6 +246,7 @@ void BrightnessSlider::setBrightness(int brightness, bool animate, bool triggerC
     
     currentBrightness_ = brightness;
     lv_slider_set_value(slider_, brightness, animate ? LV_ANIM_ON : LV_ANIM_OFF);
+    updateValueLabel();
     
     // Trigger callback if requested (for external updates like web UI)
     if (triggerCallback && callback_) {
@@ -231,15 +269,14 @@ void BrightnessSlider::syncFromSlider() {
 }
 
 void BrightnessSlider::cleanup() {
-    if (slider_) {
-        lv_obj_del(slider_);
-        slider_ = nullptr;
+    // Deleting the card takes the header, the caption, the readout and the
+    // track with it.
+    if (card_) {
+        lv_obj_del(card_);
+        card_ = nullptr;
     }
-    
-    if (label_) {
-        lv_obj_del(label_);
-        label_ = nullptr;
-    }
+    slider_ = nullptr;
+    label_ = nullptr;
     
     parentTab_ = nullptr;
     initialized_ = false;

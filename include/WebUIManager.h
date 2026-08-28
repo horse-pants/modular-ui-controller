@@ -4,7 +4,6 @@
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
 
-#include <LittleFS.h>
 
 #include <WiFi.h>
 #include <Preferences.h>
@@ -68,8 +67,6 @@ private:
     AsyncWebSocket webSocket_;
     
     // Private methods
-    bool initializeLittleFS();
-    void writeEmbeddedFilesToFS();
     void initializeWebSocket();
 
     // WebSocket handling

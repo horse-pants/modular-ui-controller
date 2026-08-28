@@ -1,4 +1,6 @@
 #include "WebUIManager.h"
+
+#include "ui/EffectGrid.h"
 #include "WebApi.h"
 #include "ui/UIManager.h"
 #include "ui/ui.h"
@@ -34,11 +36,6 @@ bool WebUIManager::initialize() {
 
     if (!server_) {
         Logger.error("WebUIManager: No web server provided!");
-        return false;
-    }
-
-    if (!initializeLittleFS()) {
-        Logger.error("Failed to initialize LittleFS");
         return false;
     }
 
@@ -105,7 +102,10 @@ bool WebUIManager::initialize() {
         });
 
         // Initialize OTA with the shared server
-        g_otaManager->begin(server_, "", "", "spiffs");
+        // Blank partition label = no filesystem OTA. The web UI is linked into
+        // the firmware now (WebAssets.h), so there is no filesystem to update and
+        // the option would only be a way to wipe a partition by accident.
+        g_otaManager->begin(server_, "", "", "");
     }
 
     // NOTE: server_->begin() is called by WiFiSetupManager, not here
@@ -133,55 +133,6 @@ void WebUIManager::notifyClients() {
     webSocket_.textAll(stateResponse);
 }
 
-bool WebUIManager::initializeLittleFS() {
-    Logger.info("=== Initializing LittleFS ===");
-
-    // Try to mount without auto-format first to see actual errors
-    if (!LittleFS.begin(false)) {
-        Logger.warning("LittleFS Mount Failed - uploaded image cannot be mounted!");
-        Logger.warning("This means the uploaded filesystem has wrong block/page parameters.");
-        Logger.info("Trying to mount with format-on-fail as fallback...");
-
-        // As fallback, allow formatting
-        if (!LittleFS.begin(true)) {
-            Logger.error("LittleFS Mount Failed even with format!");
-            return false;
-        }
-        Logger.warning("WARNING: LittleFS was formatted blank. Files were NOT loaded from uploaded image.");
-    } else {
-        Logger.info("LittleFS mounted successfully from uploaded image!");
-    }
-
-    // List files to verify filesystem contents
-    File root = LittleFS.open("/");
-    if (!root) {
-        Logger.error("ERROR: Failed to open root directory");
-        return false;
-    }
-
-    // Check if files exist, write from PROGMEM if missing
-    // NOTE: This now just logs that files are loaded from LittleFS image
-    writeEmbeddedFilesToFS();
-
-    Logger.debug("Files in LittleFS:");
-    File file = root.openNextFile();
-    int fileCount = 0;
-    while (file) {
-        Logger.debug("  - %s (%d bytes)", file.name(), file.size());
-        file = root.openNextFile();
-        fileCount++;
-    }
-    Logger.debug("Total files found: %d", fileCount);
-    Logger.info("=== LittleFS initialization complete ===");
-
-    return true;
-}
-
-void WebUIManager::writeEmbeddedFilesToFS() {
-    // Web files are uploaded directly to LittleFS via PlatformIO's build filesystem feature
-    Logger.debug("writeEmbeddedFilesToFS: Skipped (files loaded from LittleFS image)");
-}
-
 void WebUIManager::initializeWebSocket() {
     webSocket_.onEvent(staticWebSocketEventHandler);
     server_->addHandler(&webSocket_);
@@ -197,6 +148,11 @@ String WebUIManager::generateAnimationsResponse() {
         JsonObject anim = animations.add<JsonObject>();
         anim["name"] = animationDescription(current);
         anim["value"] = i;
+        // The colour the device paints this effect's tile with. Sent rather than
+        // duplicated in the Svelte app, so the two pickers can't drift apart.
+        anim["colour"] = EffectGrid::signatureColor(i);
+        anim["colour2"] = EffectGrid::signatureColorEnd(i);
+        anim["audio"] = (i >= ICEWAVES);
     }
 
     String output;
@@ -329,7 +285,9 @@ void WebUIManager::handleAnimationMessage(const JsonDocument& request) {
 void WebUIManager::handleColorMessage(const JsonDocument& request) {
     if (g_uiManager) {
         String hexValue = (const char*)request["value"];
-        Logger.debug("Hex value: %s", hexValue.c_str());
+        // Deliberately not logged: the web wheel sends one of these per pointer
+        // move, and a line each buried the whole log buffer in a single drag —
+        // and pushed every one out to all WebSocket clients.
         UiCommand cmd;
         cmd.type = UiCommandType::SetColour;
         // cmd.colour is sized exactly for "#RRGGBB" + null. strlcpy is bounded and

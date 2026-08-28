@@ -6,8 +6,10 @@
 /**
  * @brief Brightness slider class for controlling LED brightness
  * 
- * This class manages a styled brightness slider widget with proper
- * encapsulation and event handling using callbacks.
+ * A horizontal fader in a small card, with the level shown as a live
+ * percentage beside the caption. It was a 24x200 vertical fader pinned to the
+ * left of the Colour tab, which is what left that tab with a column of dead
+ * space; going horizontal reclaimed it and gave the wheel room to grow.
  */
 class BrightnessSlider {
 public:
@@ -15,8 +17,9 @@ public:
     using BrightnessCallback = std::function<void(int brightness)>;
 
 private:
+    lv_obj_t* card_;                ///< Container: header row + track
     lv_obj_t* slider_;              ///< The slider widget
-    lv_obj_t* label_;               ///< The brightness label
+    lv_obj_t* label_;               ///< The live percentage readout
     lv_obj_t* parentTab_;           ///< Parent tab container
     bool initialized_;              ///< Initialization status
     int currentBrightness_;         ///< Current brightness value
@@ -34,8 +37,11 @@ private:
     /// Create and style the slider widget
     void createSlider();
     
-    /// Create and style the label
+    /// Create the card and its header row (caption + percentage)
     void createLabel();
+
+    /// Refresh the percentage readout from currentBrightness_
+    void updateValueLabel();
     
     /// Apply styling to the slider
     void applySliderStyling();
