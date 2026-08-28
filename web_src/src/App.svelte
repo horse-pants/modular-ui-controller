@@ -90,19 +90,19 @@
       <div class="row">
         <div class="control">
           <label for="colour-picker">Colour</label>
-          <ColorPicker value={$colour} on:change={onColourChange} />
+          <ColorPicker id="colour-picker" value={$colour} on:change={onColourChange} />
         </div>
 
         <div class="control">
-          <label>White</label>
-          <button type="button" class="btn toggle" class:active={$white} on:click={toggleWhite}>
+          <label for="white-toggle">White</label>
+          <button type="button" id="white-toggle" class="btn toggle" class:active={$white} on:click={toggleWhite}>
             {$white ? 'On' : 'Off'}
           </button>
         </div>
 
         <div class="control">
-          <label>VU</label>
-          <button type="button" class="btn toggle" class:active={$vu} on:click={toggleVu}>
+          <label for="vu-toggle">VU</label>
+          <button type="button" id="vu-toggle" class="btn toggle" class:active={$vu} on:click={toggleVu}>
             {$vu ? 'On' : 'Off'}
           </button>
         </div>

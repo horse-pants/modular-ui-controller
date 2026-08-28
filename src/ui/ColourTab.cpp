@@ -97,10 +97,14 @@ bool ColourTab::build(lv_obj_t* parent) {
     lv_obj_clear_flag(wheelContainer, LV_OBJ_FLAG_SCROLLABLE);
 
     colourWheel_.reset(new ColourWheel());
-    g_colourWheel = colourWheel_.get();
-    if (colourWheel_ && !colourWheel_->initialize(wheelContainer, 180, true)) {
-        return false;
+    if (!colourWheel_->initialize(wheelContainer, 180, UI_COLOR_SURFACE)) {
+        // The wheel needs a ~64 KB contiguous PSRAM block and a fragmented heap
+        // can refuse it. Losing colour picking is survivable; losing the whole
+        // tab (fader, VU, white, effects) isn't — so carry on without it.
+        Logger.warning("Colour wheel unavailable - continuing without it");
+        colourWheel_.reset();
     }
+    g_colourWheel = colourWheel_.get();
     if (colourWheel_) {
         // Wheel reports the picked colour, but applyCurrentColor() re-reads it from
         // the wheel itself — so the r/g/b params are intentionally unnamed (unused).
@@ -156,9 +160,9 @@ void ColourTab::applyCurrentColor() {
         colourWheel_->getColorRGB(r, g, b);
 
         if (g_ledManager) {
-            g_ledManager->setAnimationEnabled(false);
-            g_ledManager->setWhiteMode(false);
-            g_ledManager->fillColor(CRGB(r, g, b));
+            // setSolidColor() also clears animation + white mode, fills the
+            // strips and persists the colour.
+            g_ledManager->setSolidColor(CRGB(r, g, b));
         }
 
         if (whiteButton_) {

@@ -1,6 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import { navigate } from '../stores.js';
+  import ScreenshotPanel from './ScreenshotPanel.svelte';
 
   let numStrips = '';
   let ledsPerStrip = '';
@@ -309,6 +310,8 @@
         {/if}
       {/if}
     </section>
+
+    <ScreenshotPanel />
 
     <section class="card">
       <h3 class="section-title">LED Strips</h3>

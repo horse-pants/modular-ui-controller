@@ -19,6 +19,7 @@ export default defineConfig({
       },
       // API endpoints go to the device. /led-config itself is handled by the
       // Svelte router locally (and on the device by serving index.html).
+      '/screenshot.png':  { target: httpTarget, changeOrigin: true },
       '/get-led-config':  { target: httpTarget, changeOrigin: true },
       '/save-led-config': { target: httpTarget, changeOrigin: true },
       '/clear-led-state': { target: httpTarget, changeOrigin: true },

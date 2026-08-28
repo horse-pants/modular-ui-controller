@@ -4,6 +4,7 @@
 #include <WiFi.h>
 #include <Preferences.h>
 #include <Logger.h>
+#include "diag/ScreenshotRoute.h"
 #include "led/LEDManager.h"
 #include "ui/UIManager.h"
 #include "ui/ui.h"
@@ -196,6 +197,10 @@ void WebApi::registerRoutes(AsyncWebServer* server) {
     server->on("/get-message", HTTP_GET, [](AsyncWebServerRequest* request) {
         request->send(200, "application/json", "");
     });
+
+    // Screenshot endpoint for help docs. Registered here so it lands before the
+    // static wildcard below.
+    ScreenshotRoute::registerRoutes(server);
 
     // Svelte-built UI lives under /web/ and is gzipped. AsyncStaticWebHandler
     // auto-detects .gz siblings, so a request for /app.js transparently serves

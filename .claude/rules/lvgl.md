@@ -36,10 +36,25 @@ for (uint32_t i = 0; i < lv_obj_get_child_count(tab_bar); i++) {
 - The dropdown list widget **doesn't exist until the dropdown is opened.** Style it from the `LV_EVENT_READY` / open handler — not at construction time.
 - Use `lv_obj_set_scroll_dir(list, LV_DIR_VER)` to constrain dropdown scroll to vertical only.
 
-## Colour wheel indicator
+## Colour wheel
 
-- The custom `lv_colorwheel.c` in this repo draws a larger filled-circle indicator that extends past the wheel ring.
-- The indicator needs **container padding around the wheel** (~20px) so it isn't clipped. Don't try to fix this with `LV_OBJ_FLAG_OVERFLOW_VISIBLE` or scroll flags — padding is the working approach.
+LVGL 9 ships no colour picker (v8's `lv_colorwheel` was dropped and never replaced), so
+`ColourWheel` paints an HSV disc pixel-by-pixel into an `lv_canvas` — angle = hue, radius =
+saturation, value pinned at full. Things that are easy to break:
+
+- **Paint once, never repaint.** The buffer is retained for the object's lifetime; only the knob
+  moves, so every later frame is a plain blit. Don't add anything that re-paints per frame.
+- **Flush the cache after painting.** The pixels are written by the CPU but the draw unit can reach
+  PSRAM over DMA — without `lv_draw_buf_flush_cache()` you get stale lines.
+- **RGB565 has no alpha**, so the square canvas is painted out to a `backdrop` colour. Pass the
+  actual colour of the card behind it (`UI_COLOR_SURFACE`) or the corners show.
+- The knob **overhangs the square** by half its width at full saturation. That needs
+  `LV_OBJ_FLAG_OVERFLOW_VISIBLE` on the wheel's wrapper *and* ~20px of container padding around it.
+- **A press must not report a colour.** A press is also how a tab swipe begins; the colour goes out
+  on `PRESSING` (drag) or `RELEASED` (tap), and `lv_indev_get_scroll_obj()` is what tells the wheel
+  a drag became a swipe — nothing else guards it.
+- **The PSRAM alloc can fail** on a fragmented heap. `initialize()` returns false; callers degrade
+  rather than aborting the whole tab.
 
 ## Active-state visuals
 

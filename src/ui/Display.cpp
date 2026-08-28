@@ -1,4 +1,5 @@
 #include "ui/Display.h"
+#include "diag/ScreenMirror.h"
 #include "pins.h"
 
 #include <lvgl.h>
@@ -111,6 +112,12 @@ void displayFlush(lv_display_t* disp, const lv_area_t* area, uint8_t* px_map) {
     lcd.pushPixels((uint16_t*)px_map, w * h, true);
     lcd.endWrite();
 
+    // Tee the same pixels into the PSRAM mirror. LVGL renders partially, so this
+    // is the only place a complete frame ever exists — see diag/ScreenMirror.h.
+    // pushPixels() swaps for the panel and leaves px_map alone, so what lands in
+    // the mirror is LVGL's native little-endian RGB565.
+    ScreenMirror::blit(area, px_map);
+
     lv_display_flush_ready(disp);
 }
 
@@ -137,6 +144,9 @@ void Display::initPanel() {
 }
 
 void Display::setupLvglDisplay() {
+    // Best effort: without it /screenshot.png returns 503 and nothing else cares.
+    ScreenMirror::begin(screenWidth, screenHeight);
+
     lv_display_t* disp = lv_display_create(screenWidth, screenHeight);
     lv_display_set_buffers(disp, buf, NULL, sizeof(buf), LV_DISPLAY_RENDER_MODE_PARTIAL);
     lv_display_set_flush_cb(disp, displayFlush);

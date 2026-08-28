@@ -2,6 +2,7 @@
   import { createEventDispatcher, onMount, onDestroy } from 'svelte';
 
   export let value = '#ff0000';
+  export let id = undefined;   // so a <label for=...> can point at the trigger
 
   const dispatch = createEventDispatcher();
 
@@ -34,6 +35,11 @@
   }
 
   function gradientClick(e) {
+    // The gradient is a button so it's focusable and announced, but activating
+    // it from the keyboard carries no pointer position — the presets and the hex
+    // field are the keyboard path, so do nothing rather than snap to red.
+    if (e.detail === 0) return;
+
     const rect = e.currentTarget.getBoundingClientRect();
     const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
 
@@ -74,6 +80,7 @@
 
 <div class="color-picker-container" bind:this={containerEl}>
   <button type="button"
+          {id}
           class="btn color-display"
           style="background:{value}"
           aria-label="Open colour picker"
@@ -81,7 +88,10 @@
 
   {#if open}
     <div class="color-picker">
-      <div class="color-gradient" on:click={gradientClick}></div>
+      <button type="button"
+              class="color-gradient"
+              aria-label="Hue gradient - click to pick a colour"
+              on:click={gradientClick}></button>
 
       <div class="color-presets">
         {#each presets as p}
@@ -145,6 +155,9 @@
   }
 
   .color-gradient {
+    display: block;
+    appearance: none;
+    padding: 0;
     width: 100%;
     height: 100px;
     border-radius: var(--radius-button);
